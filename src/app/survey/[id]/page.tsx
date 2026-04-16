@@ -3,15 +3,17 @@
 import { useEffect, useState, Suspense, useRef } from 'react'
 import { useParams, useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
-import { CheckCircle2, User, Phone, CalendarDays, ChevronLeft, ChevronRight, Send } from 'lucide-react'
+import { CheckCircle2, User, Phone, CalendarDays, ChevronLeft, ChevronRight, Send, AlertTriangle, Sparkles } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { formatPhoneNumber } from '@/lib/format'
 import ReactMarkdown from 'react-markdown'
-import { calculateResults } from '@/utils/assemblyEngine'
+import { ZONES, CONDITION_MAP as ALL_CONDITIONS } from '@/utils/standardData'
+import { calculateStandardResult, StandardResult } from '@/utils/standardEngine'
 
 type Slide =
   | { type: 'info' }
-  | { type: 'question'; sector: any; question: any }
+  | { type: 'step1' } // Zone selection
+  | { type: 'step2' } // Condition selection
 
 function SurveyContent() {
   const params = useParams()
@@ -19,14 +21,9 @@ function SurveyContent() {
   const adminId = searchParams.get('admin_id')
 
   const [survey, setSurvey] = useState<any>(null)
-  const [sectors, setSectors] = useState<any[]>([])
-  const [questions, setQuestions] = useState<any[]>([])
-  const [scripts, setScripts] = useState<any[]>([])
-  const [spaces, setSpaces] = useState<any[]>([])
-  
   const [patientInfo, setPatientInfo] = useState({ name: '', phone: '', birthDate: '', gender: '' })
-  const [answers, setAnswers] = useState<Record<string, any>>({})
-  const [calculatedSpaceResults, setCalculatedSpaceResults] = useState<any[]>([])
+  const [answers, setAnswers] = useState<Record<string, any>>({ zone: '', conditions: [] })
+  const [standardResult, setStandardResult] = useState<StandardResult | null>(null)
   
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
@@ -34,151 +31,73 @@ function SurveyContent() {
   const [error, setError] = useState('')
 
   // UI state
-  const [slides, setSlides] = useState<Slide[]>([])
   const [step, setStep] = useState(0)
-  const [subQuestionsMap, setSubQuestionsMap] = useState<Record<string, any[]>>({})
-  const slidesRef = useRef<Slide[]>([])
+  const slides: Slide[] = [{ type: 'info' }, { type: 'step1' }, { type: 'step2' }]
   
-  useEffect(() => { slidesRef.current = slides }, [slides])
-
   useEffect(() => {
     fetchData()
   }, [params.id])
 
   const fetchData = async () => {
+    // We still fetch survey title for context, but ignore its dynamic structure
     const { data: sData, error: sErr } = await supabase
       .from('surveys')
-      .select('id, title, is_active, master_templates_json, combinations_json')
+      .select('id, title, is_active')
       .eq('id', params.id)
       .single()
 
     if (sErr || !sData || !sData.is_active) {
-      setLoading(false)
-      return
+      if (!sData) {
+        setLoading(false)
+        return
+      }
     }
     setSurvey(sData)
-
-    const [secRes, qRes, scRes] = await Promise.all([
-      supabase.from('sectors').select('*').eq('survey_id', params.id).order('order', { ascending: true }),
-      supabase.from('questions').select('*').eq('survey_id', params.id).order('order', { ascending: true }),
-      supabase.from('diagnostic_scripts').select('*').eq('survey_id', params.id)
-    ])
-
-    let loadedSectors = secRes.data || []
-    let loadedQuestions = qRes.data || []
-    
-    if (loadedSectors.length > 0) setSectors(loadedSectors)
-    if (scRes.data) setScripts(scRes.data)
-    
-    if (loadedQuestions.length > 0) {
-      setQuestions(loadedQuestions)
-      const initAns: Record<string, any> = {}
-      loadedQuestions.forEach(q => {
-        if (q.type === 'checkbox') initAns[q.id] = []
-        else initAns[q.id] = ''
-      })
-      setAnswers(initAns)
-    }
-
-    // Build Slides Array
-    const mainQuestions = loadedQuestions.filter(q => !q.parent_id)
-    const subQuestions = loadedQuestions.filter(q => !!q.parent_id)
-    
-    const subMap: Record<string, any[]> = {}
-    subQuestions.forEach(q => {
-      if (!subMap[q.parent_id]) subMap[q.parent_id] = []
-      subMap[q.parent_id].push(q)
-    })
-    setSubQuestionsMap(subMap)
-
-    const newSlides: Slide[] = [{ type: 'info' }]
-    loadedSectors.forEach(sec => {
-      const secQs = mainQuestions.filter(q => q.sector_id === sec.id)
-      if (secQs.length > 0) {
-        secQs.forEach(q => {
-          newSlides.push({ type: 'question', sector: sec, question: q })
-        })
-      }
-    })
-    setSlides(newSlides)
     setLoading(false)
   }
 
-  const handleCheckboxChange = (qId: string, option: string, checked: boolean) => {
+  const handleZoneSelect = (zone: string) => {
+    setAnswers(prev => ({ ...prev, zone }))
+    setError('')
+    setTimeout(() => goNext(), 300)
+  }
+
+  const handleConditionToggle = (condition: string) => {
     setAnswers(prev => {
-      const current = prev[qId] as string[]
-      if (checked) return { ...prev, [qId]: [...current, option] }
-      return { ...prev, [qId]: current.filter(o => o !== option) }
-    })
-  }
-
-  const handleRadioOrOXSelect = (qId: string, option: string) => {
-    setAnswers(prev => ({ ...prev, [qId]: option }))
-    setError('')
-    
-    // 동적 하위 질문 슬라이드 삽입 (Dynamic Splice)
-    setSlides(prevSlides => {
-      const currentSlide = prevSlides[step];
-      if (currentSlide?.type === 'question' && currentSlide.question.id === qId) {
-        const subs = subQuestionsMap[qId] || [];
-        if (subs.length > 0) {
-          const newSlides = [...prevSlides];
-          // 기존 하위 질문 제거
-          const filtered = newSlides.filter(s => 
-            s.type !== 'question' || (s as any).question.parent_id !== qId
-          );
-          
-          // 새 하위 질문 삽입
-          const matchedSubs = subs.filter(sq => sq.trigger_value ? sq.trigger_value === option : option === 'O');
-          if (matchedSubs.length > 0) {
-            const insertIdx = filtered.findIndex(s => s.type === 'question' && (s as any).question.id === qId) + 1;
-            const subSlides = matchedSubs.map((sq: any) => ({
-              type: 'question' as const,
-              sector: (currentSlide as any).sector,
-              question: sq
-            }));
-            filtered.splice(insertIdx, 0, ...subSlides);
-          }
-          return filtered;
-        }
+      const current = prev.conditions as string[]
+      if (current.includes(condition)) {
+        return { ...prev, conditions: current.filter(c => c !== condition) }
       }
-      return prevSlides;
+      return { ...prev, conditions: [...current, condition] }
     })
-
-    // Auto advance after short delay
-    setTimeout(() => {
-      goNext(true)
-    }, 450)
   }
 
-  const goNext = (autoAdvance = false) => {
+  const goNext = () => {
     setError('')
-    const currentSlides = slidesRef.current.length > 0 ? slidesRef.current : slides;
-    const currentSlide = currentSlides[step]
+    const currentSlide = slides[step]
 
-    // Validate
-    if (!autoAdvance) {
-      if (currentSlide?.type === 'info') {
-        if (!patientInfo.name.trim() || !patientInfo.phone.trim() || !patientInfo.birthDate || !patientInfo.gender) {
-          setError('성함, 연락처, 생년월일, 성별을 모두 입력/선택해주세요.')
-          return
-        }
-      } else if (currentSlide?.type === 'question') {
-        const q = currentSlide.question
-        if (q.is_required) {
-          const val = answers[q.id]
-          if (Array.isArray(val) ? val.length === 0 : (!val || String(val).trim() === '')) {
-            setError('이 문항은 필수 응답입니다.')
-            return
-          }
-        }
+    if (currentSlide.type === 'info') {
+      if (!patientInfo.name.trim() || !patientInfo.phone.trim() || !patientInfo.birthDate || !patientInfo.gender) {
+        setError('성함, 연락처, 생년월일, 성별을 모두 입력/선택해주세요.')
+        return
+      }
+    } else if (currentSlide.type === 'step1') {
+      if (!answers.zone) {
+        setError('진단받으실 부위를 선택해주세요.')
+        return
+      }
+    } else if (currentSlide.type === 'step2') {
+      if (answers.conditions.length === 0) {
+        setError('현재 상태에 해당하는 항목을 하나 이상 선택해주세요.')
+        return
       }
     }
 
-    if (step < currentSlides.length - 1) {
+    if (step < slides.length - 1) {
       setStep(s => s + 1)
+      window.scrollTo({ top: 0, behavior: 'smooth' })
     } else {
-      if (!autoAdvance) handleSubmit()
+      handleSubmit()
     }
   }
 
@@ -190,77 +109,30 @@ function SurveyContent() {
   const handleSubmit = async () => {
     setSubmitting(true)
 
-    // Calculate Age from birthDate
+    const result = calculateStandardResult(answers.zone, answers.conditions)
+    setStandardResult(result)
+
+    // Calculate Age for DB record (legacy format compatibility)
     const birthDateObj = new Date(patientInfo.birthDate)
     const today = new Date()
     let age = today.getFullYear() - birthDateObj.getFullYear()
-    const m = today.getMonth() - birthDateObj.getMonth()
-    if (m < 0 || (m === 0 && today.getDate() < birthDateObj.getDate())) {
-      age--
-    }
-
-    let calculatedAgeGroup = '20s'
-    if (age >= 30 && age < 40) calculatedAgeGroup = '30s'
-    else if (age >= 40) calculatedAgeGroup = '40s'
-    
-    const storedAgeGroupStr = `${calculatedAgeGroup === '20s' ? '20대' : calculatedAgeGroup === '30s' ? '30대' : '40대 이상'} (${patientInfo.birthDate})`
-    const targetKey = `${patientInfo.gender}_${calculatedAgeGroup}` as 'M_20s'|'M_30s'|'M_40s'|'F_20s'|'F_30s'|'F_40s';
-
-    const activeQuestionIds = slidesRef.current.filter(s => s.type === 'question').map(s => (s as any).question.id);
-
-    const { sectorAdviceMap, sectorAdviceArr, extraAdviceText } = calculateResults(
-      sectors,
-      questions,
-      scripts,
-      answers,
-      activeQuestionIds,
-      calculatedAgeGroup,
-      survey.combinations_json
-    );
-
-    const sectorAdviceAllText = sectorAdviceArr.length > 0 ? sectorAdviceArr.map((text: string) => `• ${text}`).join('\n\n') : '';
-
-    // 3. Assemble Master Template
-    let masterTemplateText = survey.master_templates_json ? survey.master_templates_json[targetKey] : '';
-    if (!masterTemplateText) masterTemplateText = '진단 결과가 생성되었습니다.\n\n추가 소견:\n{{extra_advice}}';
-
-    // First replace general variables
-    let finalResultText = masterTemplateText
-      .replace(/\{\{\s*name\s*\}\}/g, patientInfo.name)
-      .replace(/\{\{\s*sector_advice\s*\}\}/g, sectorAdviceAllText)
-      .replace(/\{\{\s*extra_advice\s*\}\}/g, extraAdviceText);
-
-    // Then dynamically replace all {{sector:variable_name}} across the template
-    finalResultText = finalResultText.replace(/\{\{\s*sector:([^}]+?)\s*\}\}/g, (match: string, sectorKey: string) => {
-      const target = sectorKey.trim();
-      const normalizedTarget = target.toLowerCase().replace(/[^a-z0-9_]/g, '');
-      
-      // Look for a key in sectorAdviceMap that matches the normalized target
-      const actualKey = Object.keys(sectorAdviceMap).find(k => 
-        k.toLowerCase().replace(/[^a-z0-9_]/g, '') === normalizedTarget
-      );
-      
-      // Returns mapped content, or empty string if not found/no script matched
-      return actualKey ? sectorAdviceMap[actualKey] : '';
-    });
-
-    const combinedResult = [{
-      title: '✨ 당신을 위한 맞춤 진단 결과',
-      script: finalResultText
-    }]
+    const storedAgeStr = `${Math.floor(age/10)*10}대 (${patientInfo.birthDate})`
 
     const { error: submitErr } = await supabase
       .from('responses')
       .insert({
-        survey_id: survey.id,
+        survey_id: survey?.id || params.id,
         admin_id: adminId || null,
         patient_name: patientInfo.name,
         patient_phone: patientInfo.phone,
         patient_gender: patientInfo.gender,
-        patient_age_group: storedAgeGroupStr,
-        answers,
-        sector_results: {},
-        space_results: combinedResult
+        patient_age_group: storedAgeStr,
+        answers: { patientInfo, answers },
+        sector_results: { standardResult: result },
+        space_results: [{ 
+          title: 'SOMEGOOD STANDARD 리포트', 
+          result 
+        }]
       })
 
     if (submitErr) {
@@ -268,7 +140,6 @@ function SurveyContent() {
       setError('제출 중 오류가 발생했습니다. 다시 시도해주세요.')
       setSubmitting(false)
     } else {
-      setCalculatedSpaceResults(combinedResult)
       setSubmitted(true)
       window.scrollTo({ top: 0, behavior: 'smooth' })
     }
@@ -276,43 +147,153 @@ function SurveyContent() {
 
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center bg-beige-50">
-      <div className="animate-pulse text-primary-500">설문지 데이터를 불러오는 중입니다...</div>
+      <div className="animate-pulse text-primary-500 font-medium text-lg">SOMEGOOD STANDARD 로딩 중...</div>
     </div>
   )
 
-  if (!survey || slides.length === 0) return (
+  if (!survey) return (
     <div className="min-h-screen flex items-center justify-center bg-beige-50 p-6 text-center">
       <div className="max-w-md w-full bg-white p-8 rounded-3xl border border-beige-200 shadow-sm">
         <h1 className="text-xl font-medium text-gray-900 mb-2">설문 진행 불가</h1>
-        <p className="text-gray-500">존재하지 않거나 현재 비활성화된 설문입니다.</p>
+        <p className="text-gray-500">유효하지 않은 설문 링크입니다.</p>
       </div>
     </div>
   )
 
-  if (submitted) return (
-    <div className="min-h-screen flex items-center justify-center bg-beige-50 p-4 py-12 text-center md:p-6">
-      <div className="max-w-2xl w-full bg-white p-8 md:p-12 rounded-3xl shadow-lg border border-beige-200 flex flex-col items-center animate-in fade-in zoom-in duration-500">
-        <div className="w-20 h-20 bg-green-50 rounded-full flex items-center justify-center mb-6 border-4 border-white shadow-sm">
-          <CheckCircle2 className="w-10 h-10 text-green-500" />
+  if (submitted && standardResult) return (
+    <div className="min-h-screen bg-beige-50 p-4 py-12 md:p-10 font-sans">
+      <div className="max-w-4xl mx-auto space-y-12 animate-in fade-in duration-700">
+        <div className="text-center space-y-2">
+          <div className="inline-flex items-center gap-2 bg-white px-4 py-1.5 rounded-full border border-primary-200 text-primary-600 text-sm font-semibold shadow-sm mb-4">
+            <Sparkles className="w-4 h-4" /> SOMEGOOD STANDARD
+          </div>
+          <h1 className="text-4xl font-light text-primary-900">{patientInfo.name}님의 피부 진단 리포트</h1>
+          <p className="text-gray-400">Freedom Begins with Clear Body Skin</p>
         </div>
-        <h1 className="text-3xl font-light text-primary-800 mb-4">제출 완료</h1>
-        <p className="text-gray-500 text-lg leading-relaxed">소중한 문답을 남겨주셔서 감사합니다.<br/>담당자가 확인 후 안내해 드리겠습니다.</p>
-        
-        {calculatedSpaceResults.length > 0 && (
-          <div className="w-full mt-10 space-y-4 text-left border-t border-beige-200 pt-10 animate-in fade-in slide-in-from-bottom-4 duration-700 delay-150">
-            <h2 className="text-xl font-bold text-primary-900 mb-8 text-center flex items-center justify-center gap-2">
-              {calculatedSpaceResults[0].title}
+
+        {/* PAGE 1: Diagnosis Summary */}
+        <section className="bg-white rounded-[2.5rem] shadow-xl border border-primary-100 overflow-hidden">
+          <div className="bg-primary-900 p-8 md:p-12 text-white">
+            <h2 className="text-2xl font-light mb-6 flex items-center gap-3">
+              <span className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center text-sm font-bold">01</span>
+              현재 피부 진단 요약
             </h2>
             <div className="space-y-6">
-              <div className="bg-white p-8 rounded-[2rem] border border-primary-200 shadow-md transition-all relative overflow-hidden">
-                <div className="absolute top-0 left-0 w-1.5 h-full bg-primary-400"></div>
-                <div className="text-gray-800 whitespace-pre-wrap leading-relaxed text-[16px] font-medium pl-3 prose prose-primary max-w-none prose-p:my-1 prose-ul:my-1 prose-li:my-0.5">
-                  <ReactMarkdown>{calculatedSpaceResults[0].script}</ReactMarkdown>
+              <div className="bg-white/10 rounded-2xl p-6 backdrop-blur-sm border border-white/10">
+                <p className="text-xl md:text-2xl leading-relaxed font-light">
+                  “{patientInfo.name}님의 현재 피부 상태는<br/>
+                  <span className="font-semibold text-primary-200">{standardResult.diagnosticSummary}</span>”
+                </p>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="bg-white/5 rounded-2xl p-6 border border-white/5">
+                  <h4 className="text-primary-300 text-sm font-bold mb-3 uppercase tracking-wider">관찰되는 주 증상</h4>
+                  <ul className="space-y-2">
+                    {standardResult.selectedConditions.map((c, i) => (
+                      <li key={i} className="flex items-center gap-2 text-white/90">
+                        <div className="w-1.5 h-1.5 rounded-full bg-primary-400"></div>
+                        {c}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+                <div className="bg-white/5 rounded-2xl p-6 border border-white/5">
+                  <h4 className="text-primary-300 text-sm font-bold mb-3 uppercase tracking-wider">핵심 원인 요인</h4>
+                  <div className="space-y-4">
+                    {standardResult.causes.map((cause, i) => (
+                      <div key={i}>
+                        <div className="font-semibold text-white mb-1">{cause.label}</div>
+                        <div className="text-sm text-white/60 leading-relaxed">{cause.description}</div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </div>
             </div>
           </div>
-        )}
+          
+          <div className={`p-8 md:p-12 ${standardResult.isHighRisk ? 'bg-red-50' : 'bg-primary-50/30'}`}>
+            <div className="flex items-start gap-5">
+              <div className={`w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0 ${standardResult.isHighRisk ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'}`}>
+                {standardResult.isHighRisk ? <AlertTriangle className="w-6 h-6" /> : <CheckCircle2 className="w-6 h-6" />}
+              </div>
+              <div>
+                <h3 className={`text-lg font-bold mb-1 ${standardResult.isHighRisk ? 'text-red-900' : 'text-primary-900'}`}>
+                  {standardResult.isHighRisk ? '리스크 점검: 주의 필요' : '관리 진행 상의 리스크: 낮음'}
+                </h3>
+                <p className="text-gray-600 leading-relaxed">
+                  {standardResult.isHighRisk 
+                    ? '현재 피부는 자극 시 반응이 급격히 확대될 수 있는 고위험군 요소가 포함되어 있습니다. 무리한 관리보다는 안정화와 비개입적 접근이 최우선입니다.' 
+                    : '현재 피부는 특별한 열감이나 확산 징후가 없는 안정적인 상태입니다. 설계된 방향에 따라 정상적인 관리 진행이 풍부한 효과를 낼 수 있습니다.'}
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* PAGE 2: Strategy */}
+        <section className="bg-white rounded-[2.5rem] shadow-xl border border-primary-100 p-8 md:p-12">
+          <h2 className="text-2xl font-light text-primary-900 mb-10 flex items-center gap-3">
+            <span className="w-8 h-8 rounded-full bg-primary-100 flex items-center justify-center text-sm font-bold text-primary-700">02</span>
+            맞춤 관리 방향 & 전략
+          </h2>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+            <div className="space-y-8">
+              <div>
+                <h4 className="text-sm font-bold text-primary-400 mb-4 uppercase tracking-widest">권장 관리 방향</h4>
+                <div className="flex flex-wrap gap-2">
+                  {standardResult.conclusions.map((conc, i) => (
+                    <div key={i} className="bg-primary-50 text-primary-800 px-5 py-3 rounded-2xl border border-primary-100 font-semibold shadow-sm">
+                      {conc}
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <h4 className="text-sm font-bold text-primary-400 mb-4 uppercase tracking-widest">주요 접근 방식</h4>
+                <p className="text-gray-700 leading-relaxed text-lg">
+                  본 관리는 <span className="text-primary-700 font-bold">‘{standardResult.mainReaction} 개선’</span>과 
+                  {standardResult.secondaryReaction && <span className="text-primary-700 font-bold"> ‘{standardResult.secondaryReaction} 완화’</span>}를 중심으로 설계되었습니다.
+                  병변을 단순히 제거하는 것이 아니라, 원인이 되는 구조적 요인을 정상화하여 재발을 방지하는 것이 핵심입니다.
+                </p>
+              </div>
+            </div>
+            <div className="bg-beige-50 rounded-3xl p-8 border border-beige-100 flex flex-col justify-center">
+              <p className="text-primary-900/70 italic text-center text-lg leading-relaxed">
+                “피부 상태를 고려하지 않은 강한 개입은 오히려 부작용과 색소 잔흔을 유도할 수 있습니다. 썸굿은 전문가의 기준에 따라 안전하고 확실한 순서를 지킵니다.”
+              </p>
+            </div>
+          </div>
+        </section>
+
+        {/* PAGE 3: Brand Message */}
+        <section className="bg-primary-900 rounded-[2.5rem] shadow-2xl p-12 text-center text-white relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -mr-32 -mt-32 blur-3xl"></div>
+          <div className="relative z-10 space-y-8">
+            <p className="text-xl md:text-2xl font-light leading-relaxed max-w-2xl mx-auto">
+              {patientInfo.name}님의 변화는 단순한 관리의 결과가 아닌,<br/>
+              피부를 깊이 이해하고 방향을 설계한 결과입니다.
+            </p>
+            <div className="w-12 h-0.5 bg-primary-400 mx-auto"></div>
+            <p className="text-lg text-primary-200">
+              SOMEGOOD STANDARD는 시작보다 끝을 더 중요하게 생각합니다.<br/>
+              그리고 그 끝까지 함께합니다.
+            </p>
+            <div className="pt-6">
+              <p className="text-3xl font-light tracking-widest text-white/40 uppercase">Freedom Begins with Clear Body Skin</p>
+            </div>
+          </div>
+        </section>
+
+        <div className="flex justify-center pt-8">
+          <button 
+            onClick={() => window.location.reload()}
+            className="px-8 py-4 bg-white text-primary-800 rounded-2xl border border-primary-200 font-medium hover:bg-primary-50 transition"
+          >
+            새로운 설문 시작하기
+          </button>
+        </div>
       </div>
     </div>
   )
@@ -322,7 +303,7 @@ function SurveyContent() {
 
   return (
     <div className="min-h-screen bg-beige-50 flex flex-col font-sans">
-      {/* Top Header & Progress */}
+      {/* Header */}
       <div className="bg-white shadow-sm border-b border-beige-200 sticky top-0 z-20">
         <div className="h-1.5 w-full bg-gray-100">
           <div 
@@ -331,16 +312,19 @@ function SurveyContent() {
           />
         </div>
         <div className="p-4 flex items-center justify-between max-w-3xl mx-auto w-full">
-          <h1 className="text-lg font-medium text-primary-800 truncate flex-1">{survey.title}</h1>
-          <span className="text-sm font-medium text-gray-400 whitespace-nowrap ml-4 bg-gray-50 px-2 py-1 rounded-md">
-            {step} / {slides.length - 1} 완료
+          <h1 className="text-lg font-medium text-primary-800 flex items-center gap-2">
+            <Sparkles className="w-5 h-5 text-primary-400" />
+            SOMEGOOD STANDARD
+          </h1>
+          <span className="text-sm font-medium text-gray-400 bg-gray-50 px-2 py-1 rounded-md">
+            {step + 1} / 3 단계
           </span>
         </div>
       </div>
 
-      <div className="flex-1 flex flex-col justify-center max-w-2xl mx-auto w-full p-4 py-8 relative overflow-hidden">
+      <div className="flex-1 flex flex-col justify-center max-w-2xl mx-auto w-full p-4 py-8">
         {error && (
-          <div className="bg-red-50 border border-red-200 text-red-700 px-5 py-3 rounded-xl mb-6 mx-auto text-sm w-full animate-in fade-in slide-in-from-top-4 shadow-sm text-center relative z-10">
+          <div className="bg-red-50 border border-red-200 text-red-700 px-5 py-3 rounded-xl mb-6 text-sm animate-in fade-in slide-in-from-top-4 text-center">
             {error}
           </div>
         )}
@@ -348,117 +332,107 @@ function SurveyContent() {
         <AnimatePresence mode="wait">
           <motion.div
             key={step}
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -20 }}
-            transition={{ duration: 0.3, ease: 'easeInOut' }}
-            className="w-full flex-1 flex flex-col justify-center"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            transition={{ duration: 0.3 }}
+            className="w-full"
           >
-            {/* 1. Basic Info Slide */}
+            {/* 1. Basic Info */}
             {currentSlide.type === 'info' && (
-              <div className="bg-white rounded-3xl shadow-sm border border-primary-200 p-8 py-10">
-                <div className="text-center mb-8">
-                  <h2 className="text-2xl font-light text-primary-800 mb-2">기본 정보 입력</h2>
-                  <p className="text-gray-500 text-sm">정확한 진단을 위해 아래 정보를 기입해주세요.</p>
+              <div className="bg-white rounded-3xl shadow-sm border border-primary-100 p-8 md:p-10 space-y-8">
+                <div className="text-center">
+                  <h2 className="text-2xl font-light text-primary-800 mb-2">당신에 대해 알려주세요</h2>
+                  <p className="text-gray-400 text-sm">표준화된 정밀 진단을 위한 준비 단계입니다.</p>
                 </div>
                 
-                <div className="space-y-6">
-                  <label className="block space-y-2">
-                    <span className="text-sm font-medium text-gray-700 flex items-center gap-2"><User className="w-4 h-4 text-primary-400"/> 성함</span>
-                    <input autoFocus type="text" placeholder="홍길동" className="w-full border border-gray-200 rounded-xl px-4 py-3.5 outline-none focus:ring-2 focus:ring-primary-400 bg-gray-50 focus:bg-white transition text-gray-800 text-lg" value={patientInfo.name} onChange={e=>setPatientInfo({...patientInfo, name: e.target.value})} onKeyDown={e => e.key === 'Enter' && goNext()} />
-                  </label>
-                  <label className="block space-y-2">
-                    <span className="text-sm font-medium text-gray-700 flex items-center gap-2"><Phone className="w-4 h-4 text-primary-400"/> 연락처</span>
-                    <input type="tel" placeholder="010-0000-0000" className="w-full border border-gray-200 rounded-xl px-4 py-3.5 outline-none focus:ring-2 focus:ring-primary-400 bg-gray-50 focus:bg-white transition text-gray-800 text-lg" value={patientInfo.phone} onChange={e=>setPatientInfo({...patientInfo, phone: formatPhoneNumber(e.target.value)})} onKeyDown={e => e.key === 'Enter' && goNext()} />
-                  </label>
-                  <label className="block space-y-2">
-                    <span className="text-sm font-medium text-gray-700 flex items-center gap-2"><CalendarDays className="w-4 h-4 text-primary-400"/> 생년월일</span>
-                    <input type="date" className="w-full border border-gray-200 rounded-xl px-4 py-3.5 outline-none focus:ring-2 focus:ring-primary-400 bg-gray-50 focus:bg-white transition text-gray-800 text-lg" value={patientInfo.birthDate} onChange={e=>setPatientInfo({...patientInfo, birthDate: e.target.value})} onKeyDown={e => e.key === 'Enter' && goNext()} />
-                  </label>
-                  <label className="block space-y-2 pt-2">
-                    <span className="text-sm font-medium text-gray-700 flex items-center gap-2"><User className="w-4 h-4 text-primary-400"/> 생물학적 성별</span>
-                    <div className="flex gap-4 mt-2">
-                      <button 
-                        type="button"
-                        onClick={() => setPatientInfo({...patientInfo, gender: 'M'})}
-                        className={`flex-1 py-3.5 rounded-xl border-2 font-medium transition-all ${patientInfo.gender === 'M' ? 'border-primary-500 bg-primary-50 text-primary-800 shadow-sm' : 'border-gray-200 bg-white text-gray-400 hover:border-primary-300 hover:text-gray-700'}`}
-                      >남성</button>
-                      <button 
-                        type="button"
-                        onClick={() => setPatientInfo({...patientInfo, gender: 'F'})}
-                        className={`flex-1 py-3.5 rounded-xl border-2 font-medium transition-all ${patientInfo.gender === 'F' ? 'border-primary-500 bg-primary-50 text-primary-800 shadow-sm' : 'border-gray-200 bg-white text-gray-400 hover:border-primary-300 hover:text-gray-700'}`}
-                      >여성</button>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <span className="text-xs font-bold text-gray-400 uppercase ml-1">성함</span>
+                    <input type="text" placeholder="홍길동" className="w-full border border-gray-100 rounded-2xl px-5 py-4 outline-none focus:ring-2 focus:ring-primary-400 bg-gray-50 transition" value={patientInfo.name} onChange={e=>setPatientInfo({...patientInfo, name: e.target.value})} />
+                  </div>
+                  <div className="space-y-2">
+                    <span className="text-xs font-bold text-gray-400 uppercase ml-1">연락처</span>
+                    <input type="tel" placeholder="010-0000-0000" className="w-full border border-gray-100 rounded-2xl px-5 py-4 outline-none focus:ring-2 focus:ring-primary-400 bg-gray-50 transition" value={patientInfo.phone} onChange={e=>setPatientInfo({...patientInfo, phone: formatPhoneNumber(e.target.value)})} />
+                  </div>
+                  <div className="space-y-2">
+                    <span className="text-xs font-bold text-gray-400 uppercase ml-1">생년월일</span>
+                    <input type="date" className="w-full border border-gray-100 rounded-2xl px-5 py-4 outline-none focus:ring-2 focus:ring-primary-400 bg-gray-50 transition" value={patientInfo.birthDate} onChange={e=>setPatientInfo({...patientInfo, birthDate: e.target.value})} />
+                  </div>
+                  <div className="space-y-2">
+                    <span className="text-xs font-bold text-gray-400 uppercase ml-1">성별</span>
+                    <div className="flex gap-2">
+                      {['M', 'F'].map(g => (
+                        <button key={g} onClick={() => setPatientInfo({...patientInfo, gender: g})} className={`flex-1 py-4 rounded-2xl border font-medium transition ${patientInfo.gender === g ? 'border-primary-500 bg-primary-50 text-primary-800 shadow-sm' : 'border-gray-100 bg-gray-50 text-gray-400'}`}>
+                          {g === 'M' ? '남성' : '여성'}
+                        </button>
+                      ))}
                     </div>
-                  </label>
+                  </div>
                 </div>
               </div>
             )}
 
-            {/* 2. Question Slide */}
-            {currentSlide.type === 'question' && (
-              <div className="bg-white rounded-3xl shadow-sm border border-beige-200 p-8 min-h-[360px] flex flex-col">
-                <div className="mb-6">
-                  <h3 className="text-2xl font-medium text-gray-900 leading-snug">
-                    <span className="text-primary-400 mr-2 font-light hidden sm:inline-block">Q.</span>
-                    {currentSlide.question.content}
-                    {currentSlide.question.is_required && <span className="text-red-500 ml-1 text-lg">*</span>}
-                  </h3>
+            {/* 2. Step 1: Zone Selection */}
+            {currentSlide.type === 'step1' && (
+              <div className="bg-white rounded-3xl shadow-sm border border-primary-100 p-8 md:p-10">
+                <div className="text-center mb-10">
+                  <h2 className="text-2xl font-light text-primary-800 mb-2">STEP 1. 관리가 필요한 부위</h2>
+                  <p className="text-gray-400 text-sm">진단 기준이 되는 6개 구역 중 하나를 선택해주세요.</p>
                 </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {ZONES.map((zone, i) => (
+                    <button 
+                      key={i} 
+                      onClick={() => handleZoneSelect(zone)}
+                      className={`text-left p-5 rounded-2xl border-2 transition ${answers.zone === zone ? 'border-primary-500 bg-primary-50 text-primary-900 shadow-md' : 'border-gray-50 bg-gray-50/50 hover:border-primary-200 text-gray-600'}`}
+                    >
+                      <span className="text-xs font-bold text-primary-300 block mb-1">AREA 0{i+1}</span>
+                      <span className="text-lg font-medium">{zone}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
 
-                <div className="flex-1">
-                  {currentSlide.question.type === 'text' && (
-                    <textarea 
-                      autoFocus
-                      rows={4} 
-                      className="w-full border border-gray-200 rounded-2xl p-5 focus:ring-2 focus:ring-primary-400 outline-none transition bg-gray-50 focus:bg-white text-gray-800 text-lg resize-none" 
-                      placeholder="자유롭게 답변을 입력해주세요..." 
-                      value={answers[currentSlide.question.id]} 
-                      onChange={(e) => setAnswers({ ...answers, [currentSlide.question.id]: e.target.value })} 
-                    />
-                  )}
-
-                  {(currentSlide.question.type === 'radio' || currentSlide.question.type === 'o_x' || currentSlide.question.type === 'multiple_choice') && (
-                    <div className="space-y-3">
-                      {currentSlide.question.options.map((opt: string, optIdx: number) => {
-                        const isSelected = answers[currentSlide.question.id] === opt;
-                        const label = opt.includes('||') ? opt.split('||')[0] : opt;
-                        return (
-                          <button 
-                            key={optIdx} 
-                            onClick={() => handleRadioOrOXSelect(currentSlide.question.id, opt)}
-                            className={`w-full text-left flex items-center gap-4 p-5 rounded-2xl transition border-2 ${isSelected ? 'bg-primary-50 border-primary-400 shadow-sm' : 'bg-transparent border-gray-100 hover:border-primary-200 hover:bg-beige-50/50'}`}
-                          >
-                            <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${isSelected ? 'border-primary-500 bg-primary-500' : 'border-gray-300'}`}>
-                              {isSelected && <div className="w-2.5 h-2.5 bg-white rounded-full" />}
-                            </div>
-                            <span className={`text-lg transition ${isSelected ? 'font-medium text-primary-900' : 'text-gray-700'}`}>{label}</span>
-                          </button>
-                        )
-                      })}
+            {/* 3. Step 2: Condition Selection */}
+            {currentSlide.type === 'step2' && (
+              <div className="bg-white rounded-3xl shadow-sm border border-primary-100 p-8 md:p-10">
+                <div className="text-center mb-10">
+                  <h2 className="text-2xl font-light text-primary-800 mb-2">STEP 2. 현재 관찰되는 반응</h2>
+                  <p className="text-gray-400 text-sm">해당되는 모든 병변을 선택해주세요 (중복 가능)</p>
+                </div>
+                
+                <div className="space-y-8">
+                  {Object.entries(
+                    Object.keys(ALL_CONDITIONS).reduce((acc, name) => {
+                      const cat = ALL_CONDITIONS[name].category;
+                      if (!acc[cat]) acc[cat] = [];
+                      acc[cat].push(name);
+                      return acc;
+                    }, {} as Record<string, string[]>)
+                  ).map(([cat, items], idx) => (
+                    <div key={idx} className="space-y-3">
+                      <h4 className="text-sm font-bold text-primary-400 uppercase tracking-widest ml-1">{cat}</h4>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        {items.map((item, i) => {
+                          const isSelected = answers.conditions.includes(item);
+                          return (
+                            <button
+                              key={i}
+                              onClick={() => handleConditionToggle(item)}
+                              className={`flex items-center gap-3 p-4 rounded-xl border-2 transition ${isSelected ? 'border-primary-400 bg-primary-50 text-primary-900 shadow-sm' : 'border-gray-50 bg-gray-50/30 text-gray-500'}`}
+                            >
+                              <div className={`w-5 h-5 rounded flex items-center justify-center border ${isSelected ? 'border-primary-500 bg-primary-500' : 'border-gray-200'}`}>
+                                {isSelected && <CheckCircle2 className="w-3.5 h-3.5 text-white" />}
+                              </div>
+                              <span className="text-[15px] font-medium">{item}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
                     </div>
-                  )}
-
-                  {currentSlide.question.type === 'checkbox' && (
-                    <div className="space-y-3">
-                      {currentSlide.question.options.map((opt: string, optIdx: number) => {
-                        const isSelected = (answers[currentSlide.question.id] as string[])?.includes(opt) || false;
-                        return (
-                          <label key={optIdx} className={`w-full flex items-center gap-4 p-5 rounded-2xl cursor-pointer transition border-2 ${isSelected ? 'bg-primary-50 border-primary-400 shadow-sm' : 'bg-transparent border-gray-100 hover:border-primary-200 hover:bg-beige-50/50'}`}>
-                            <div className={`w-6 h-6 rounded border-2 flex items-center justify-center flex-shrink-0 ${isSelected ? 'border-primary-500 bg-primary-500' : 'border-gray-300'}`}>
-                              {isSelected && <CheckCircle2 className="w-4 h-4 text-white" />}
-                            </div>
-                            <input 
-                              type="checkbox" 
-                              className="hidden" 
-                              checked={isSelected} 
-                              onChange={(e) => handleCheckboxChange(currentSlide.question.id, opt, e.target.checked)} 
-                            />
-                            <span className={`text-lg transition ${isSelected ? 'font-medium text-primary-900' : 'text-gray-700'}`}>{opt}</span>
-                          </label>
-                        )
-                      })}
-                    </div>
-                  )}
+                  ))}
                 </div>
               </div>
             )}
@@ -466,27 +440,14 @@ function SurveyContent() {
         </AnimatePresence>
       </div>
 
-      {/* Bottom Navigation */}
-      <div className="bg-white border-t border-gray-100 p-4 pb-8 sm:pb-4 sticky bottom-0 z-20">
+      {/* Footer Navigation */}
+      <div className="bg-white border-t border-gray-100 p-4 sticky bottom-0 z-20">
         <div className="max-w-2xl mx-auto flex gap-4">
-          <button 
-            onClick={goPrev}
-            disabled={step === 0 || submitting}
-            className="flex-1 py-4 flex items-center justify-center gap-2 bg-gray-50 hover:bg-gray-100 text-gray-700 rounded-2xl font-medium transition disabled:opacity-30 border border-gray-200 hover:border-gray-300"
-          >
+          <button onClick={goPrev} disabled={step === 0 || submitting} className="flex-1 py-4 flex items-center justify-center gap-2 bg-gray-50 text-gray-500 rounded-2xl font-medium disabled:opacity-30">
             <ChevronLeft className="w-5 h-5"/> 이전
           </button>
-          
-          <button 
-            onClick={() => goNext(false)}
-            disabled={submitting}
-            className={`flex-[2] py-4 flex items-center justify-center gap-2 rounded-2xl font-medium transition shadow-md ${step === slides.length - 1 ? 'bg-green-600 hover:bg-green-700 text-white shadow-green-600/20' : 'bg-primary-600 hover:bg-primary-700 text-white shadow-primary-600/20'}`}
-          >
-            {step === slides.length - 1 ? (
-              submitting ? '처리 중...' : <><Send className="w-5 h-5"/> 최종 제출하기</>
-            ) : (
-              <>다음 <ChevronRight className="w-5 h-5"/></>
-            )}
+          <button onClick={goNext} disabled={submitting} className="flex-[2] py-4 flex items-center justify-center gap-2 bg-primary-900 text-white rounded-2xl font-medium shadow-lg hover:bg-black transition">
+            {step === slides.length - 1 ? (submitting ? '제출 중...' : '결과 리포트 생성') : <>다음 단계 <ChevronRight className="w-5 h-5"/></>}
           </button>
         </div>
       </div>
@@ -496,7 +457,7 @@ function SurveyContent() {
 
 export default function Page() {
   return (
-    <Suspense fallback={<div className="min-h-screen bg-beige-50 animate-pulse flex items-center justify-center p-12 text-primary-400">모듈을 불러오는 중입니다...</div>}>
+    <Suspense fallback={<div>Loading...</div>}>
       <SurveyContent />
     </Suspense>
   )
