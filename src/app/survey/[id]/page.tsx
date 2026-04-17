@@ -14,6 +14,10 @@ type Slide =
   | { type: 'info' }
   | { type: 'step1' } // Zone selection
   | { type: 'step2' } // Condition selection
+  | { type: 'step2-conclusion' } // Core selective selection
+  | { type: 'step3' } // Reveal Cause
+  | { type: 'stop' } // Reveal Risk
+  | { type: 'step4' } // Reveal Action Plan
 
 function SurveyContent() {
   const params = useParams()
@@ -22,7 +26,11 @@ function SurveyContent() {
 
   const [survey, setSurvey] = useState<any>(null)
   const [patientInfo, setPatientInfo] = useState({ name: '', phone: '', birthDate: '', gender: '' })
-  const [answers, setAnswers] = useState<Record<string, any>>({ zone: '', conditions: [] })
+  const [answers, setAnswers] = useState<Record<string, any>>({ 
+    zone: '', 
+    conditions: [],
+    coreCondition: ''
+  })
   const [standardResult, setStandardResult] = useState<StandardResult | null>(null)
   
   const [loading, setLoading] = useState(true)
@@ -32,7 +40,15 @@ function SurveyContent() {
 
   // UI state
   const [step, setStep] = useState(0)
-  const slides: Slide[] = [{ type: 'info' }, { type: 'step1' }, { type: 'step2' }]
+  const slides: Slide[] = [
+    { type: 'info' }, 
+    { type: 'step1' }, 
+    { type: 'step2' },
+    { type: 'step2-conclusion' },
+    { type: 'step3' },
+    { type: 'stop' },
+    { type: 'step4' }
+  ]
   
   useEffect(() => {
     fetchData()
@@ -94,6 +110,14 @@ function SurveyContent() {
         setError('현재 상태에 해당하는 항목을 하나 이상 선택해주세요.')
         return
       }
+    } else if (currentSlide.type === 'step2-conclusion') {
+      if (!answers.coreCondition) {
+        setError('가장 핵심이 되는 반응을 하나 선택해주세요.')
+        return
+      }
+      // Calculate result here so subsequent reveal steps have data
+      const result = calculateStandardResult(answers.zone, answers.conditions, answers.coreCondition)
+      setStandardResult(result)
     }
 
     if (step < slides.length - 1) {
@@ -112,8 +136,9 @@ function SurveyContent() {
   const handleSubmit = async () => {
     setSubmitting(true)
 
-    const result = calculateStandardResult(answers.zone, answers.conditions)
-    setStandardResult(result)
+    // Ensure result is calculated if it hasn't been already
+    const result = standardResult || calculateStandardResult(answers.zone, answers.conditions, answers.coreCondition)
+    if (!standardResult) setStandardResult(result)
 
     // Calculate Age for DB record (legacy format compatibility)
     const birthDateObj = new Date(patientInfo.birthDate)
@@ -324,7 +349,7 @@ function SurveyContent() {
             SOMEGOOD STANDARD
           </h1>
           <span className="text-sm font-medium text-gray-400 bg-gray-50 px-2 py-1 rounded-md">
-            {step + 1} / 3 단계
+            {step + 1} / 7 단계
           </span>
         </div>
       </div>
@@ -440,6 +465,118 @@ function SurveyContent() {
                       </div>
                     </div>
                   ))}
+                </div>
+              </div>
+            )}
+
+            {/* 4. Step 2-Conclusion: Core Reaction */}
+            {currentSlide.type === 'step2-conclusion' && (
+              <div className="bg-white rounded-3xl shadow-sm border border-primary-100 p-8 md:p-10">
+                <div className="text-center mb-10">
+                  <h2 className="text-2xl font-light text-primary-800 mb-2">STEP 2-결론. 핵심 반응 선택</h2>
+                  <p className="text-gray-400 text-sm">선택하신 증상 중 가장 개선하고 싶은 핵심 반응을 하나만 골라주세요.</p>
+                </div>
+                
+                <div className="grid grid-cols-1 gap-3">
+                  {answers.conditions.map((item: string, i: number) => (
+                    <button 
+                      key={i} 
+                      onClick={() => setAnswers({...answers, coreCondition: item})}
+                      className={`text-left p-5 rounded-2xl border-2 transition ${answers.coreCondition === item ? 'border-primary-500 bg-primary-50 text-primary-900 shadow-md' : 'border-gray-50 bg-gray-50/50 hover:border-primary-200 text-gray-600'}`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-lg font-medium">{item}</span>
+                        {answers.coreCondition === item && <CheckCircle2 className="w-6 h-6 text-primary-500" />}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* 5. Step 3: Why (Cause Reveal) */}
+            {currentSlide.type === 'step3' && standardResult && (
+              <div className="bg-white rounded-3xl shadow-xl border border-primary-100 p-8 md:p-12 overflow-hidden relative">
+                <div className="absolute top-0 right-0 p-8 opacity-5">
+                  <Send className="w-32 h-32 text-primary-900" />
+                </div>
+                <div className="relative z-10">
+                  <div className="inline-block bg-primary-100 text-primary-700 px-3 py-1 rounded-full text-xs font-bold mb-6 tracking-widest uppercase">Analysis. 01</div>
+                  <h2 className="text-3xl font-light text-primary-900 mb-8">“왜 이런 반응이 생겼을까요?”</h2>
+                  
+                  <div className="space-y-6">
+                    {standardResult.causes.map((cause, i) => (
+                      <motion.div 
+                        key={i} 
+                        initial={{ opacity: 0, x: -20 }} 
+                        animate={{ opacity: 1, x: 0 }} 
+                        transition={{ delay: i * 0.2 }}
+                        className="bg-primary-50/50 p-6 rounded-2xl border border-primary-100"
+                      >
+                        <h4 className="text-primary-800 font-bold text-lg mb-2">{cause.label}</h4>
+                        <p className="text-gray-600 leading-relaxed">{cause.description}</p>
+                      </motion.div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* 6. STOP: Risk Check Reveal */}
+            {currentSlide.type === 'stop' && standardResult && (
+              <div className={`rounded-3xl shadow-xl border p-8 md:p-12 text-center transition-colors duration-700 ${standardResult.isHighRisk ? 'bg-red-50 border-red-200' : 'bg-green-50 border-green-200'}`}>
+                <motion.div 
+                  initial={{ scale: 0.8, opacity: 0 }} 
+                  animate={{ scale: 1, opacity: 1 }} 
+                  className={`w-20 h-20 rounded-full mx-auto flex items-center justify-center mb-8 ${standardResult.isHighRisk ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'}`}
+                >
+                  {standardResult.isHighRisk ? <AlertTriangle className="w-10 h-10" /> : <CheckCircle2 className="w-10 h-10" />}
+                </motion.div>
+                
+                <h2 className={`text-3xl font-light mb-4 ${standardResult.isHighRisk ? 'text-red-900' : 'text-green-900'}`}>
+                  {standardResult.isHighRisk ? 'STOP! 정밀 점검이 필요합니다' : 'GO! 관리가 가능한 상태입니다'}
+                </h2>
+                <p className="text-gray-600 text-lg max-w-md mx-auto leading-relaxed mb-8">
+                  {standardResult.isHighRisk 
+                    ? '현재 피부는 자극 시 반응이 확대될 가능성이 있는 고위험군 요소가 포함되어 있습니다. 무리한 관리보다는 안정화가 최우선입니다.' 
+                    : '현재 피부는 특별한 열감이나 확산 징후가 없는 안정적인 상태입니다. 설계된 방향에 따라 관리를 진행할 수 있습니다.'}
+                </p>
+                
+                <div className={`inline-flex items-center gap-2 px-6 py-3 rounded-full font-bold text-sm ${standardResult.isHighRisk ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
+                  위험도: {standardResult.isHighRisk ? '높음 (주의 요망)' : '낮음 (안정적)'}
+                </div>
+              </div>
+            )}
+
+            {/* 7. Step 4: Action Plan Reveal */}
+            {currentSlide.type === 'step4' && standardResult && (
+              <div className="bg-primary-900 rounded-3xl shadow-2xl p-8 md:p-12 text-white overflow-hidden relative">
+                <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -mr-32 -mt-32 blur-3xl"></div>
+                
+                <div className="relative z-10">
+                  <div className="inline-block bg-white/20 px-3 py-1 rounded-full text-xs font-bold mb-6 tracking-widest uppercase">Management Strategy</div>
+                  <h2 className="text-3xl font-light mb-10">“앞으로 어떻게 관리해야 할까요?”</h2>
+                  
+                  <div className="space-y-4">
+                    {standardResult.conclusions.map((conc, i) => (
+                      <motion.div 
+                        key={i} 
+                        initial={{ opacity: 0, y: 10 }} 
+                        animate={{ opacity: 1, y: 0 }} 
+                        transition={{ delay: i * 0.3 }}
+                        className="bg-white/10 p-6 rounded-2xl border border-white/10 backdrop-blur-sm"
+                      >
+                        <div className="text-primary-300 text-xs font-bold mb-1">PROPOSAL 0{i+1}</div>
+                        <div className="text-xl font-medium">{conc}</div>
+                      </motion.div>
+                    ))}
+                  </div>
+                  
+                  <div className="mt-10 pt-10 border-t border-white/10">
+                    <p className="text-white/60 text-sm leading-relaxed">
+                      ※ 상기 내용은 고객님의 선택을 바탕으로 한 SOMEGOOD STANDARD의 1차 진단 결과이며, 전문가의 문진 후 최종 관리 방향이 확정됩니다.
+                    </p>
+                  </div>
                 </div>
               </div>
             )}

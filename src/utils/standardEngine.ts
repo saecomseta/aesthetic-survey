@@ -12,7 +12,7 @@ export interface StandardResult {
   brandMessage: string;
 }
 
-export function calculateStandardResult(zone: string, conditions: string[]): StandardResult {
+export function calculateStandardResult(zone: string, conditions: string[], coreCondition?: string): StandardResult {
   if (conditions.length === 0) {
     return {
       zone,
@@ -38,15 +38,31 @@ export function calculateStandardResult(zone: string, conditions: string[]): Sta
   );
   const isHighRisk = highRiskConditions.length > 0;
 
-  // 3. Determine Main and Secondary Reactions based on Priority
-  // Sorted by Priest (lower number is higher priority)
-  const sortedReactions = matchedMappings
-    .map(m => m.reactionType)
-    .filter((v, i, a) => a.indexOf(v) === i) // Unique
-    .sort((a, b) => PRIORITY_MAP[a] - PRIORITY_MAP[b]);
+  // 3. Determine Main and Secondary Reactions
+  let mainReactionLabel = '기타';
+  let secondaryReactionLabel = '';
 
-  const mainReactionLabel = sortedReactions[0] || '기타';
-  const secondaryReactionLabel = sortedReactions[1] || '';
+  if (coreCondition && CONDITION_MAP[coreCondition]) {
+    mainReactionLabel = CONDITION_MAP[coreCondition].reactionType;
+    
+    // Find highest priority reaction other than main
+    const otherReactions = matchedMappings
+      .map(m => m.reactionType)
+      .filter(r => r !== mainReactionLabel)
+      .filter((v, i, a) => a.indexOf(v) === i)
+      .sort((a, b) => PRIORITY_MAP[a] - PRIORITY_MAP[b]);
+    
+    secondaryReactionLabel = otherReactions[0] || '';
+  } else {
+    // Legacy/Auto-selection logic based on Priority
+    const sortedReactions = matchedMappings
+      .map(m => m.reactionType)
+      .filter((v, i, a) => a.indexOf(v) === i)
+      .sort((a, b) => PRIORITY_MAP[a] - PRIORITY_MAP[b]);
+
+    mainReactionLabel = sortedReactions[0] || '기타';
+    secondaryReactionLabel = sortedReactions[1] || '';
+  }
 
   // 4. Generate Diagnostic Summary
   const diagnosticSummary = secondaryReactionLabel
@@ -54,8 +70,15 @@ export function calculateStandardResult(zone: string, conditions: string[]): Sta
     : `${zone}에 나타난 ${mainReactionLabel} 반응이 주를 이루는 상태입니다.`;
 
   // 5. Map Causes (Max 2)
-  const allCauses = matchedMappings.map(m => m.cause);
-  const uniqueCauses = Array.from(new Set(allCauses)).slice(0, 2);
+  // If coreCondition exists, prioritize its cause
+  let uniqueCauses: string[] = [];
+  if (coreCondition && CONDITION_MAP[coreCondition]) {
+    uniqueCauses.push(CONDITION_MAP[coreCondition].cause);
+  }
+  
+  const otherCauses = matchedMappings.map(m => m.cause);
+  uniqueCauses = Array.from(new Set([...uniqueCauses, ...otherCauses])).slice(0, 2);
+
   const causes = uniqueCauses.map(c => ({
     label: c,
     description: CAUSE_MAP_USER[c] || c
@@ -66,9 +89,14 @@ export function calculateStandardResult(zone: string, conditions: string[]): Sta
   if (isHighRisk) {
     resultConclusions = [CONCLUSIONS[3]]; // 3. 비개입 / 보류 접근
   } else {
-    // Collect all conclusion IDs
-    const allConclusionIds = matchedMappings.flatMap(m => m.conclusions);
-    const uniqueIds = Array.from(new Set(allConclusionIds)).slice(0, 2);
+    // If coreCondition exists, prioritize its conclusions
+    let conclusionIds: number[] = [];
+    if (coreCondition && CONDITION_MAP[coreCondition]) {
+      conclusionIds = [...CONDITION_MAP[coreCondition].conclusions];
+    }
+    
+    const otherIds = matchedMappings.flatMap(m => m.conclusions);
+    const uniqueIds = Array.from(new Set([...conclusionIds, ...otherIds])).slice(0, 2);
     resultConclusions = uniqueIds.map(id => `${id}. ${CONCLUSIONS[id]}`);
   }
 
