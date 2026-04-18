@@ -48,6 +48,13 @@ export default function SuperAdminDashboard() {
             로그아웃
           </button>
           <Link
+            href="/admin/logic"
+            className="flex items-center gap-2 px-5 py-2.5 bg-beige-50 border border-beige-200 text-primary-800 rounded-lg hover:bg-white transition-colors shadow-sm font-medium"
+          >
+            <ShieldAlert className="w-4 h-4 text-primary-500" />
+            진단 로직 설계 보기
+          </Link>
+          <Link
             href="/admin/responses"
             className="flex items-center gap-2 px-5 py-2.5 bg-white border border-primary-200 text-primary-700 rounded-lg hover:bg-primary-50 transition-colors shadow-sm font-medium"
           >

@@ -5,7 +5,7 @@ import { supabase } from '@/lib/supabase'
 import { QRCodeSVG } from 'qrcode.react'
 import { User } from '@supabase/supabase-js'
 import { formatPhoneNumber } from '@/lib/format'
-import { Search, ArrowLeft, ClipboardList } from 'lucide-react'
+import { Search, ArrowLeft, ClipboardList, Sparkles } from 'lucide-react'
 
 export default function AdminQRDashboard({ user }: { user: User }) {
   const [activeSurvey, setActiveSurvey] = useState<any>(null)
@@ -79,11 +79,21 @@ export default function AdminQRDashboard({ user }: { user: User }) {
             <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-primary-400 to-primary-600"></div>
             {activeSurvey ? (
               <div className="flex flex-col items-center">
-                <div className="bg-white p-6 rounded-[2rem] border border-beige-200 shadow-sm mb-8 inline-block">
-                  <QRCodeSVG value={surveyUrl} size={280} level="M" fgColor="#5A4A3E" />
+                <div className="bg-primary-50 p-8 rounded-full mb-8 shadow-inner border border-primary-100 animate-pulse">
+                  <ClipboardList className="w-16 h-16 text-primary-600" />
                 </div>
-                <h2 className="text-3xl font-bold text-primary-800 mb-4 tracking-tight">문진표 시작하기</h2>
-                <p className="text-gray-500 leading-relaxed text-[17px] px-4">스마트폰 카메라로 위 QR 코드를 스캔해<br/>고객 문진표를 바로 시작할 수 있습니다.</p>
+                <h2 className="text-3xl font-bold text-primary-800 mb-4 tracking-tight">신규 고객 문진 시작</h2>
+                <p className="text-gray-500 leading-relaxed text-[17px] px-4 mb-10">아래 버튼을 클릭하여 새 탭에서<br/>고객 전용 문진표를 바로 시작할 수 있습니다.</p>
+                
+                <a 
+                  href={surveyUrl} 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="w-full flex items-center justify-center gap-3 py-5 bg-primary-900 text-white rounded-2xl font-bold text-xl shadow-xl hover:bg-black transition-all hover:scale-[1.02]"
+                >
+                  <Sparkles className="w-6 h-6 text-primary-300" />
+                  문진표 페애지 열기
+                </a>
               </div>
             ) : (
               <div className="py-24 text-gray-400 font-medium">진행 가능한 문진표가 없습니다.<br/><span className="text-sm mt-3 inline-block font-normal">최고관리자에게 문의하세요.</span></div>

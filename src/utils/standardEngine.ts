@@ -12,7 +12,7 @@ export interface StandardResult {
   brandMessage: string;
 }
 
-export function calculateStandardResult(zone: string, conditions: string[], coreCondition?: string): StandardResult {
+export function calculateStandardResult(zone: string, conditions: string[], coreConditions: string[] = []): StandardResult {
   if (conditions.length === 0) {
     return {
       zone,
@@ -42,13 +42,21 @@ export function calculateStandardResult(zone: string, conditions: string[], core
   let mainReactionLabel = '기타';
   let secondaryReactionLabel = '';
 
-  if (coreCondition && CONDITION_MAP[coreCondition]) {
-    mainReactionLabel = CONDITION_MAP[coreCondition].reactionType;
+  if (coreConditions.length > 0) {
+    const coreMappings = coreConditions
+      .map(c => CONDITION_MAP[c])
+      .filter(m => !!m);
     
-    // Find highest priority reaction other than main
+    const reactionTypes = coreMappings.map(m => m.reactionType);
+    const uniqueReactions = Array.from(new Set(reactionTypes))
+      .sort((a, b) => PRIORITY_MAP[a] - PRIORITY_MAP[b]);
+    
+    mainReactionLabel = uniqueReactions.join('·');
+    
+    // Find highest priority reaction other than main ones
     const otherReactions = matchedMappings
       .map(m => m.reactionType)
-      .filter(r => r !== mainReactionLabel)
+      .filter(r => !uniqueReactions.includes(r))
       .filter((v, i, a) => a.indexOf(v) === i)
       .sort((a, b) => PRIORITY_MAP[a] - PRIORITY_MAP[b]);
     
@@ -69,39 +77,42 @@ export function calculateStandardResult(zone: string, conditions: string[], core
     ? `${zone}에 나타난 ${mainReactionLabel} 반응과 ${secondaryReactionLabel} 반응이 함께 존재하는 상태입니다.`
     : `${zone}에 나타난 ${mainReactionLabel} 반응이 주를 이루는 상태입니다.`;
 
-  // 5. Map Causes (Max 2)
-  // If coreCondition exists, prioritize its cause
+  // 5. Map Causes (Max 2 or more if multiple cores)
+  // If coreConditions exist, prioritize their causes
   let uniqueCauses: string[] = [];
-  if (coreCondition && CONDITION_MAP[coreCondition]) {
-    uniqueCauses.push(CONDITION_MAP[coreCondition].cause);
+  if (coreConditions.length > 0) {
+    coreConditions.forEach(c => {
+      if (CONDITION_MAP[c]) uniqueCauses.push(CONDITION_MAP[c].cause);
+    });
   }
   
   const otherCauses = matchedMappings.map(m => m.cause);
-  uniqueCauses = Array.from(new Set([...uniqueCauses, ...otherCauses])).slice(0, 2);
+  uniqueCauses = Array.from(new Set([...uniqueCauses, ...otherCauses])).slice(0, 3); // Slightly more if multiple cores
 
   const causes = uniqueCauses.map(c => ({
     label: c,
     description: CAUSE_MAP_USER[c] || c
   }));
 
-  // 6. Map Conclusions (Max 2)
+  // 6. Map Conclusions (Max 2-3)
   let resultConclusions: string[] = [];
   if (isHighRisk) {
     resultConclusions = [CONCLUSIONS[3]]; // 3. 비개입 / 보류 접근
   } else {
-    // If coreCondition exists, prioritize its conclusions
     let conclusionIds: number[] = [];
-    if (coreCondition && CONDITION_MAP[coreCondition]) {
-      conclusionIds = [...CONDITION_MAP[coreCondition].conclusions];
+    if (coreConditions.length > 0) {
+      coreConditions.forEach(c => {
+        if (CONDITION_MAP[c]) conclusionIds = [...conclusionIds, ...CONDITION_MAP[c].conclusions];
+      });
     }
     
     const otherIds = matchedMappings.flatMap(m => m.conclusions);
-    const uniqueIds = Array.from(new Set([...conclusionIds, ...otherIds])).slice(0, 2);
+    const uniqueIds = Array.from(new Set([...conclusionIds, ...otherIds])).slice(0, 3);
     resultConclusions = uniqueIds.map(id => `${id}. ${CONCLUSIONS[id]}`);
   }
 
   return {
-    zone,
+    zone: zone,
     selectedConditions: conditions,
     mainReaction: mainReactionLabel,
     secondaryReaction: secondaryReactionLabel,

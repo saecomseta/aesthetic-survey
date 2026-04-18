@@ -29,7 +29,7 @@ function SurveyContent() {
   const [answers, setAnswers] = useState<Record<string, any>>({ 
     zone: '', 
     conditions: [],
-    coreCondition: ''
+    coreConditions: []
   })
   const [standardResult, setStandardResult] = useState<StandardResult | null>(null)
   
@@ -111,12 +111,12 @@ function SurveyContent() {
         return
       }
     } else if (currentSlide.type === 'step2-conclusion') {
-      if (!answers.coreCondition) {
-        setError('가장 핵심이 되는 반응을 하나 선택해주세요.')
+      if (answers.coreConditions.length === 0) {
+        setError('가장 핵심이 되는 반응을 하나 이상 선택해주세요.')
         return
       }
       // Calculate result here so subsequent reveal steps have data
-      const result = calculateStandardResult(answers.zone, answers.conditions, answers.coreCondition)
+      const result = calculateStandardResult(answers.zone, answers.conditions, answers.coreConditions)
       setStandardResult(result)
     }
 
@@ -137,7 +137,7 @@ function SurveyContent() {
     setSubmitting(true)
 
     // Ensure result is calculated if it hasn't been already
-    const result = standardResult || calculateStandardResult(answers.zone, answers.conditions, answers.coreCondition)
+    const result = standardResult || calculateStandardResult(answers.zone, answers.conditions, answers.coreConditions)
     if (!standardResult) setStandardResult(result)
 
     // Calculate Age for DB record (legacy format compatibility)
@@ -478,18 +478,29 @@ function SurveyContent() {
                 </div>
                 
                 <div className="grid grid-cols-1 gap-3">
-                  {answers.conditions.map((item: string, i: number) => (
-                    <button 
-                      key={i} 
-                      onClick={() => setAnswers({...answers, coreCondition: item})}
-                      className={`text-left p-5 rounded-2xl border-2 transition ${answers.coreCondition === item ? 'border-primary-500 bg-primary-50 text-primary-900 shadow-md' : 'border-gray-50 bg-gray-50/50 hover:border-primary-200 text-gray-600'}`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <span className="text-lg font-medium">{item}</span>
-                        {answers.coreCondition === item && <CheckCircle2 className="w-6 h-6 text-primary-500" />}
-                      </div>
-                    </button>
-                  ))}
+                  {answers.conditions.map((item: string, i: number) => {
+                    const isSelected = answers.coreConditions.includes(item);
+                    return (
+                      <button 
+                        key={i} 
+                        onClick={() => {
+                          setAnswers(prev => {
+                            const current = prev.coreConditions as string[];
+                            if (current.includes(item)) {
+                              return { ...prev, coreConditions: current.filter(c => c !== item) };
+                            }
+                            return { ...prev, coreConditions: [...current, item] };
+                          });
+                        }}
+                        className={`text-left p-5 rounded-2xl border-2 transition ${isSelected ? 'border-primary-500 bg-primary-50 text-primary-900 shadow-md' : 'border-gray-50 bg-gray-50/50 hover:border-primary-200 text-gray-600'}`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="text-lg font-medium">{item}</span>
+                          {isSelected && <CheckCircle2 className="w-6 h-6 text-primary-500" />}
+                        </div>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             )}
