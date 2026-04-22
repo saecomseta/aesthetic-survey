@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import Link from 'next/link'
-import { Plus, ClipboardList, Clock, ArrowRight, ShieldAlert } from 'lucide-react'
+import { Plus, ClipboardList, Clock, ArrowRight, ShieldAlert, BarChart3 } from 'lucide-react'
 
 export default function SuperAdminDashboard() {
   const [surveys, setSurveys] = useState<any[]>([])
@@ -59,13 +59,6 @@ export default function SuperAdminDashboard() {
             className="flex items-center gap-2 px-5 py-2.5 bg-white border border-primary-200 text-primary-700 rounded-lg hover:bg-primary-50 transition-colors shadow-sm font-medium"
           >
             전체 통합 데이터 보기
-          </Link>
-          <Link 
-            href="/admin/surveys/new" 
-            className="flex items-center gap-2 px-5 py-2.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors shadow-sm font-medium"
-          >
-            <Plus className="w-5 h-5" />
-            새 설문 만들기
           </Link>
         </div>
       </div>

@@ -12,7 +12,8 @@ export interface StandardResult {
   brandMessage: string;
 }
 
-export function calculateStandardResult(zone: string, conditions: string[], coreConditions: string[] = []): StandardResult {
+export function calculateStandardResult(zones: string[], conditions: string[], coreConditions: string[] = []): StandardResult {
+  const zone = zones.join(', ');
   if (conditions.length === 0) {
     return {
       zone,

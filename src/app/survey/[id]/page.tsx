@@ -7,17 +7,21 @@ import { CheckCircle2, User, Phone, CalendarDays, ChevronLeft, ChevronRight, Sen
 import { motion, AnimatePresence } from 'framer-motion'
 import { formatPhoneNumber } from '@/lib/format'
 import ReactMarkdown from 'react-markdown'
-import { ZONES, CONDITION_MAP as ALL_CONDITIONS } from '@/utils/standardData'
+import { ZONES, CONDITION_MAP as ALL_CONDITIONS, FIRST_SESSION_LOGIC, BACKGROUND_GUIDE_DATA } from '@/utils/standardData'
 import { calculateStandardResult, StandardResult } from '@/utils/standardEngine'
+import { calculateFirstSessionDecision, calculateProfileAnalysis } from '@/utils/firstSessionEngine'
 
 type Slide =
   | { type: 'info' }
   | { type: 'step1' } // Zone selection
   | { type: 'step2' } // Condition selection
   | { type: 'step2-conclusion' } // Core selective selection
-  | { type: 'step3' } // Reveal Cause
-  | { type: 'stop' } // Reveal Risk
+  | { type: 'step3' } // Reveal Cause (Logic 1)
+  | { type: 'step3-risk' } // NEW: Select Risk Grade (R1-R4) Professional
+  | { type: 'step4-background' } // NEW: Select Thickness, Tissue, etc.
+  | { type: 'stop' } // Reveal Risk (Logic 1)
   | { type: 'step4' } // Reveal Action Plan
+  | { type: 'step5-first-session' } // NEW: Final 1st Session Decision Reveal
 
 function SurveyContent() {
   const params = useParams()
@@ -27,11 +31,18 @@ function SurveyContent() {
   const [survey, setSurvey] = useState<any>(null)
   const [patientInfo, setPatientInfo] = useState({ name: '', phone: '', birthDate: '', gender: '' })
   const [answers, setAnswers] = useState<Record<string, any>>({ 
-    zone: '', 
+    zone: [], 
     conditions: [],
-    coreConditions: []
+    coreConditions: [],
+    primaryCause: '',
+    riskGrade: 'R1',
+    skinThickness: '보통',
+    tissueType: '보통',
+    pigmentHigh: false,
+    historyOfEasyMarking: false
   })
   const [standardResult, setStandardResult] = useState<StandardResult | null>(null)
+  const [firstSessionDecision, setFirstSessionDecision] = useState<any>(null)
   
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
@@ -46,8 +57,11 @@ function SurveyContent() {
     { type: 'step2' },
     { type: 'step2-conclusion' },
     { type: 'step3' },
+    { type: 'step3-risk' },
+    { type: 'step4-background' },
     { type: 'stop' },
-    { type: 'step4' }
+    { type: 'step4' },
+    { type: 'step5-first-session' }
   ]
   
   useEffect(() => {
@@ -76,9 +90,14 @@ function SurveyContent() {
   }
 
   const handleZoneSelect = (zone: string) => {
-    setAnswers(prev => ({ ...prev, zone }))
-    setError('')
-    setTimeout(() => goNext(), 300)
+    setAnswers(prev => {
+      const current = prev.zone as string[];
+      if (current.includes(zone)) {
+        return { ...prev, zone: current.filter(z => z !== zone) };
+      }
+      return { ...prev, zone: [...current, zone] };
+    });
+    setError('');
   }
 
   const handleConditionToggle = (condition: string) => {
@@ -101,7 +120,7 @@ function SurveyContent() {
         return
       }
     } else if (currentSlide.type === 'step1') {
-      if (!answers.zone) {
+      if (answers.zone.length === 0) {
         setError('진단받으실 부위를 선택해주세요.')
         return
       }
@@ -118,6 +137,24 @@ function SurveyContent() {
       // Calculate result here so subsequent reveal steps have data
       const result = calculateStandardResult(answers.zone, answers.conditions, answers.coreConditions)
       setStandardResult(result)
+      
+      // Auto-set primary cause if not set
+      if (!answers.primaryCause && result.causes.length > 0) {
+        setAnswers(prev => ({ ...prev, primaryCause: result.causes[0].label }))
+      }
+    } else if (currentSlide.type === 'step4-background') {
+      // Final calculation for 1st session decision
+      const birthDateObj = new Date(patientInfo.birthDate)
+      const today = new Date()
+      let age = today.getFullYear() - birthDateObj.getFullYear()
+      const ageGroup = `${Math.floor(age/10)*10}대`
+
+      const decision = calculateFirstSessionDecision({
+        ...answers,
+        symptoms: answers.conditions,
+        ageGroup
+      })
+      setFirstSessionDecision(decision)
     }
 
     if (step < slides.length - 1) {
@@ -156,10 +193,11 @@ function SurveyContent() {
         patient_gender: patientInfo.gender,
         patient_age_group: storedAgeStr,
         answers: { patientInfo, answers },
-        sector_results: { standardResult: result },
+        sector_results: { standardResult: result, firstSessionDecision },
         space_results: [{ 
           title: 'SOMEGOOD STANDARD 리포트', 
-          result 
+          result,
+          firstSessionDecision
         }]
       })
 
@@ -217,6 +255,15 @@ function SurveyContent() {
                   <span className="font-semibold text-primary-200">{standardResult.diagnosticSummary}</span>”
                 </p>
               </div>
+
+              {/* NEW: Profile Analysis Section */}
+              <div className="bg-white/5 rounded-2xl p-6 border border-white/5 backdrop-blur-sm">
+                <h4 className="text-primary-300 text-[10px] font-bold uppercase tracking-widest mb-2">테마별 분석</h4>
+                <p className="text-sm text-white/80 leading-relaxed italic">
+                  “{calculateProfileAnalysis(Math.floor((new Date().getFullYear() - new Date(patientInfo.birthDate).getFullYear()) / 10) * 10 + '대', patientInfo.gender)}”
+                </p>
+              </div>
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="bg-white/5 rounded-2xl p-6 border border-white/5">
                   <h4 className="text-primary-300 text-sm font-bold mb-3 uppercase tracking-wider">관찰되는 주 증상</h4>
@@ -262,7 +309,6 @@ function SurveyContent() {
             </div>
           </div>
         </section>
-
         {/* PAGE 2: Strategy */}
         <section className="bg-white rounded-[2.5rem] shadow-xl border border-primary-100 p-8 md:p-12">
           <h2 className="text-2xl font-light text-primary-900 mb-10 flex items-center gap-3">
@@ -298,6 +344,67 @@ function SurveyContent() {
             </div>
           </div>
         </section>
+
+        {/* NEW PAGE: 1st Session Optimized Plan */}
+        {firstSessionDecision && (
+          <section className="bg-white rounded-[2.5rem] shadow-xl border border-primary-100 overflow-hidden">
+            <div className="bg-primary-50 p-8 md:p-12 border-b border-primary-100">
+              <h2 className="text-2xl font-light text-primary-900 mb-2 flex items-center gap-3">
+                <span className="w-8 h-8 rounded-full bg-primary-900 flex items-center justify-center text-sm font-bold text-white">03</span>
+                1회차 최적화 솔루션
+              </h2>
+              <p className="text-gray-500">SOMEGOOD STANDARD 알고리즘이 제안하는 첫 회차 최우선 방향입니다.</p>
+            </div>
+            
+            <div className="p-8 md:p-12 space-y-10">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div className="space-y-6">
+                  <div>
+                    <h4 className="text-xs font-bold text-primary-400 uppercase tracking-widest mb-3">1차 우선 목표</h4>
+                    <div className="text-3xl font-bold text-primary-900">{firstSessionDecision.primaryTarget}</div>
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-bold text-primary-400 uppercase tracking-widest mb-3">1회차 접근 방향</h4>
+                    <div className="text-xl font-medium text-primary-700 bg-primary-50 px-5 py-3 rounded-2xl inline-block">
+                      {firstSessionDecision.direction}
+                    </div>
+                  </div>
+                </div>
+                <div className="bg-beige-50 rounded-3xl p-8 border border-beige-100 italic text-primary-800 leading-relaxed">
+                  “{firstSessionDecision.internalInterpretation}”
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8 pt-8 border-t border-gray-100">
+                <div>
+                  <h4 className="text-xs font-bold text-red-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                    <AlertTriangle className="w-4 h-4" /> 1회차 제한 항목
+                  </h4>
+                  <div className="flex flex-wrap gap-2">
+                    {firstSessionDecision.restrictions.map((res: string, i: number) => (
+                      <span key={i} className="bg-red-50 text-red-700 px-4 py-2 rounded-xl text-sm font-semibold border border-red-100">
+                        {res}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <h4 className="text-xs font-bold text-green-500 uppercase tracking-widest mb-4 flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4" /> 다음 단계 진입 조건
+                  </h4>
+                  <ul className="space-y-2">
+                    {firstSessionDecision.nextStepConditions.map((cond: string, i: number) => (
+                      <li key={i} className="flex items-center gap-3 text-gray-700">
+                        <div className="w-1.5 h-1.5 rounded-full bg-green-500" />
+                        <span className="text-sm font-medium">{cond}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </section>
+        )}
 
         {/* PAGE 3: Brand Message */}
         <section className="bg-primary-900 rounded-[2.5rem] shadow-2xl p-12 text-center text-white relative overflow-hidden">
@@ -412,15 +519,14 @@ function SurveyContent() {
                   <h2 className="text-2xl font-light text-primary-800 mb-2">STEP 1. 관리가 필요한 부위</h2>
                   <p className="text-gray-400 text-sm">진단 기준이 되는 6개 구역 중 하나를 선택해주세요.</p>
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {ZONES.map((zone, i) => (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {ZONES.map(z => (
                     <button 
-                      key={i} 
-                      onClick={() => handleZoneSelect(zone)}
-                      className={`text-left p-5 rounded-2xl border-2 transition ${answers.zone === zone ? 'border-primary-500 bg-primary-50 text-primary-900 shadow-md' : 'border-gray-50 bg-gray-50/50 hover:border-primary-200 text-gray-600'}`}
+                      key={z}
+                      onClick={() => handleZoneSelect(z)}
+                      className={`p-6 rounded-2xl border-2 transition-all duration-300 ${answers.zone.includes(z) ? 'border-primary-500 bg-primary-50 text-primary-900 shadow-md ring-4 ring-primary-100' : 'bg-gray-50 border-gray-100 text-gray-500 hover:border-primary-200'}`}
                     >
-                      <span className="text-xs font-bold text-primary-300 block mb-1">AREA 0{i+1}</span>
-                      <span className="text-lg font-medium">{zone}</span>
+                      <div className="font-bold text-lg mb-1">{z}</div>
                     </button>
                   ))}
                 </div>
@@ -533,6 +639,109 @@ function SurveyContent() {
               </div>
             )}
 
+            {/* NEW: Step 3-Risk: Risk Grade Selection */}
+            {currentSlide.type === 'step3-risk' && (
+              <div className="bg-white rounded-3xl shadow-sm border border-primary-100 p-8 md:p-10">
+                <div className="text-center mb-10">
+                  <h2 className="text-2xl font-light text-primary-800 mb-2">STEP 4. 전문가 리스크 판정</h2>
+                  <p className="text-gray-400 text-sm">현재 피부가 감당할 수 있는 자극의 범위를 선택해주세요.</p>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {[
+                    { id: 'R1', label: 'R1 안정군', desc: '자유로운 관리 접근 가능', color: 'bg-green-50 text-green-700 border-green-200' },
+                    { id: 'R2', label: 'R2 주의군', desc: '강도 하향 및 보수적 접근', color: 'bg-yellow-50 text-yellow-700 border-yellow-200' },
+                    { id: 'R3', label: 'R3 고반응군', desc: '압출/박리 보류, 진정 우선', color: 'bg-orange-50 text-orange-700 border-orange-200' },
+                    { id: 'R4', label: 'R4 고위험군', desc: '무조건 안정화, 적극적 개입 금지', color: 'bg-red-50 text-red-700 border-red-200' }
+                  ].map(grade => (
+                    <button 
+                      key={grade.id}
+                      onClick={() => setAnswers(prev => ({ ...prev, riskGrade: grade.id }))}
+                      className={`text-left p-6 rounded-2xl border-2 transition-all duration-300 ${answers.riskGrade === grade.id ? `${grade.color} ring-4 ring-primary-100 shadow-md` : 'bg-gray-50 border-gray-100 text-gray-500'}`}
+                    >
+                      <div className="font-bold text-lg mb-1">{grade.label}</div>
+                      <div className="text-xs opacity-70">{grade.desc}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* NEW: Step 4-Background: Detailed Factors */}
+            {currentSlide.type === 'step4-background' && (
+              <div className="bg-white rounded-3xl shadow-sm border border-primary-100 p-8 md:p-10 space-y-10">
+                <div className="text-center">
+                  <h2 className="text-2xl font-light text-primary-800 mb-2">STEP 5. 피부 배경 조건</h2>
+                  <p className="text-gray-400 text-sm">보다 정교한 1회차 설계를 위해 피부의 물리적 특성을 확인합니다.</p>
+                </div>
+
+                <div className="space-y-8">
+                  {/* Skin Thickness Slider */}
+                  <div className="space-y-4">
+                    <div className="flex justify-between items-end">
+                      <label className="text-sm font-bold text-gray-400 uppercase tracking-widest">피부 두께</label>
+                      <span className="text-primary-600 font-bold bg-primary-50 px-3 py-1 rounded-full text-sm">{answers.skinThickness}</span>
+                    </div>
+                    <div className="relative h-12 flex items-center">
+                      <input 
+                        type="range" 
+                        min="0" max="5" step="1"
+                        value={['극도로 얇음', '매우 얇음', '얇은 편', '보통', '두꺼운 편', '매우 두꺼움'].indexOf(answers.skinThickness) === -1 ? 3 : ['극도로 얇음', '매우 얇음', '얇은 편', '보통', '두꺼운 편', '매우 두꺼움'].indexOf(answers.skinThickness)}
+                        onChange={(e) => {
+                          const val = ['극도로 얇음', '매우 얇음', '얇은 편', '보통', '두꺼운 편', '매우 두꺼움'][parseInt(e.target.value)];
+                          setAnswers(prev => ({ ...prev, skinThickness: val }));
+                        }}
+                        className="w-full h-2 bg-gray-100 rounded-lg appearance-none cursor-pointer accent-primary-600"
+                      />
+                      <div className="absolute -bottom-6 w-full flex justify-between text-[10px] text-gray-400 font-bold px-1">
+                        <span>EXTREME THIN</span>
+                        <span>NORMAL</span>
+                        <span>EXTREME THICK</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Tissue Type */}
+                  <div className="space-y-4">
+                    <label className="text-sm font-bold text-gray-400 uppercase tracking-widest block">피부 살성 (TISSUE TYPE)</label>
+                    <div className="grid grid-cols-5 gap-2">
+                      {['매우 부드러움', '부드러운 편', '보통', '단단한 편', '매우 단단함'].map((t, i) => (
+                        <button 
+                          key={i}
+                          onClick={() => setAnswers(prev => ({ ...prev, tissueType: t }))}
+                          className={`flex flex-col items-center gap-2 p-3 rounded-xl border transition-all ${answers.tissueType === t ? 'bg-primary-900 border-primary-900 text-white shadow-lg scale-105' : 'bg-gray-50 border-gray-100 text-gray-400 hover:border-primary-200'}`}
+                        >
+                          <div className={`w-1 h-8 rounded-full ${answers.tissueType === t ? 'bg-primary-300' : 'bg-gray-200'}`} />
+                          <span className="text-[10px] font-bold text-center leading-tight whitespace-pre-wrap">{t.replace(' ', '\n')}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Tendencies */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <button 
+                      onClick={() => setAnswers(prev => ({ ...prev, pigmentHigh: !prev.pigmentHigh }))}
+                      className={`flex items-center justify-between p-5 rounded-2xl border-2 transition ${answers.pigmentHigh ? 'border-primary-500 bg-primary-50 text-primary-900 shadow-md' : 'border-gray-50 bg-gray-50 text-gray-500'}`}
+                    >
+                      <span className="font-bold text-sm">색소 경향 높음</span>
+                      <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${answers.pigmentHigh ? 'bg-primary-500 border-primary-500' : 'border-gray-200'}`}>
+                        {answers.pigmentHigh && <div className="w-2 h-2 bg-white rounded-full" />}
+                      </div>
+                    </button>
+                    <button 
+                      onClick={() => setAnswers(prev => ({ ...prev, historyOfEasyMarking: !prev.historyOfEasyMarking }))}
+                      className={`flex items-center justify-between p-5 rounded-2xl border-2 transition ${answers.historyOfEasyMarking ? 'border-primary-500 bg-primary-50 text-primary-900 shadow-md' : 'border-gray-50 bg-gray-50 text-gray-500'}`}
+                    >
+                      <span className="font-bold text-sm">손상/흔적 이력</span>
+                      <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${answers.historyOfEasyMarking ? 'bg-primary-500 border-primary-500' : 'border-gray-200'}`}>
+                        {answers.historyOfEasyMarking && <div className="w-2 h-2 bg-white rounded-full" />}
+                      </div>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* 6. STOP: Risk Check Reveal */}
             {currentSlide.type === 'stop' && standardResult && (
               <div className={`rounded-3xl shadow-xl border p-8 md:p-12 text-center transition-colors duration-700 ${standardResult.isHighRisk ? 'bg-red-50 border-red-200' : 'bg-green-50 border-green-200'}`}>
@@ -587,6 +796,51 @@ function SurveyContent() {
                     <p className="text-white/60 text-sm leading-relaxed">
                       ※ 상기 내용은 고객님의 선택을 바탕으로 한 SOMEGOOD STANDARD의 1차 진단 결과이며, 전문가의 문진 후 최종 관리 방향이 확정됩니다.
                     </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* NEW: Step 5-First Session Decision Reveal */}
+            {currentSlide.type === 'step5-first-session' && firstSessionDecision && (
+              <div className="bg-white rounded-3xl shadow-2xl border border-primary-200 p-8 md:p-12 overflow-hidden relative">
+                <div className="absolute top-0 right-0 w-32 h-32 bg-primary-50 rounded-full -mr-16 -mt-16 blur-2xl"></div>
+                
+                <div className="relative z-10 text-center space-y-8">
+                  <motion.div 
+                    initial={{ scale: 0.9, opacity: 0 }} 
+                    animate={{ scale: 1, opacity: 1 }}
+                    className="inline-flex items-center gap-2 bg-primary-900 text-primary-200 px-6 py-2 rounded-full text-xs font-bold tracking-widest uppercase mb-4"
+                  >
+                    <Sparkles className="w-4 h-4" /> 1st Session Optimized Decision
+                  </motion.div>
+                  
+                  <h2 className="text-4xl font-light text-primary-900 leading-tight">
+                    첫 회차 최우선 목표<br/>
+                    <span className="font-bold text-primary-600">[{firstSessionDecision.primaryTarget}]</span>
+                  </h2>
+
+                  <div className="bg-beige-50/50 p-8 rounded-[2rem] border border-beige-100">
+                    <p className="text-xl text-primary-800 leading-relaxed font-light italic">
+                      “{firstSessionDecision.internalInterpretation}”
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-left">
+                    <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
+                      <h4 className="text-xs font-bold text-primary-400 uppercase tracking-widest mb-3">접근 방향</h4>
+                      <div className="text-lg font-bold text-primary-900">{firstSessionDecision.direction}</div>
+                    </div>
+                    <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
+                      <h4 className="text-xs font-bold text-primary-400 uppercase tracking-widest mb-3">다음 단계 조건</h4>
+                      <ul className="space-y-1">
+                        {firstSessionDecision.nextStepConditions.map((cond: string, i: number) => (
+                          <li key={i} className="text-sm text-gray-600 flex items-center gap-2">
+                            <div className="w-1 h-1 rounded-full bg-primary-400" /> {cond}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
                   </div>
                 </div>
               </div>

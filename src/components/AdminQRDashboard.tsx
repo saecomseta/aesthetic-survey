@@ -5,7 +5,8 @@ import { supabase } from '@/lib/supabase'
 import { QRCodeSVG } from 'qrcode.react'
 import { User } from '@supabase/supabase-js'
 import { formatPhoneNumber } from '@/lib/format'
-import { Search, ArrowLeft, ClipboardList, Sparkles } from 'lucide-react'
+import { Search, ArrowLeft, ClipboardList, Sparkles, BarChart3 } from 'lucide-react'
+import Link from 'next/link'
 
 export default function AdminQRDashboard({ user }: { user: User }) {
   const [activeSurvey, setActiveSurvey] = useState<any>(null)
@@ -107,6 +108,8 @@ export default function AdminQRDashboard({ user }: { user: User }) {
             <ClipboardList className="w-6 h-6" />
             📋 전체 고객 리스트 조회하기
           </button>
+
+
         </div>
       ) : (
         <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -117,7 +120,16 @@ export default function AdminQRDashboard({ user }: { user: User }) {
             >
               <ArrowLeft className="w-5 h-5"/> QR 스캔 화면으로 돌아가기
             </button>
-            <h2 className="text-2xl font-bold text-gray-800">📋 고객 진단 목록</h2>
+            <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-4">
+              📋 고객 진단 목록
+              <Link
+                href="/admin/dashboard"
+                className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-amber-400 via-orange-500 to-amber-500 text-white rounded-xl font-bold text-sm shadow-lg shadow-orange-100 hover:scale-105 transition-all"
+              >
+                <BarChart3 className="w-4 h-4" />
+                나의 진단 통계 보기
+              </Link>
+            </h2>
           </div>
 
           <div className="bg-white rounded-3xl shadow-sm border border-beige-200 overflow-hidden mb-8 p-6 lg:px-10 lg:py-8">

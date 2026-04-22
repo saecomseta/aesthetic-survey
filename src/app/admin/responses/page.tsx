@@ -4,13 +4,14 @@ import { useEffect, useState } from 'react'
 import AdminGuard from '@/components/AdminGuard'
 import { supabase } from '@/lib/supabase'
 import Link from 'next/link'
-import { ArrowLeft, Download, Search, Trash2, AlertTriangle, X } from 'lucide-react'
+import { ArrowLeft, Download, Search, Trash2, AlertTriangle, X, BarChart3 } from 'lucide-react'
 import { formatPhoneNumber } from '@/lib/format'
 import { toast } from 'react-hot-toast'
 
 export default function MasterResponsesPage() {
   const [responses, setResponses] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [fetchError, setFetchError] = useState<string | null>(null)
 
   const [searchInput, setSearchInput] = useState('')
   const [searchName, setSearchName] = useState('')
@@ -55,22 +56,58 @@ export default function MasterResponsesPage() {
   }, [searchName, startDate, endDate, sortBy])
 
   const fetchResponses = async () => {
-    setLoading(true)
-    let query = supabase
-      .from('responses')
-      .select('*, surveys(title)')
+    try {
+      setLoading(true)
+      setFetchError(null)
+      
+      // 1. Fetch Responses and Surveys (This join usually works)
+      let query = supabase
+        .from('responses')
+        .select('*, surveys(title)')
 
-    if (searchName) query = query.ilike('patient_name', `%${searchName}%`)
-    if (startDate) query = query.gte('submitted_at', `${startDate}T00:00:00.000Z`)
-    if (endDate) query = query.lte('submitted_at', `${endDate}T23:59:59.999Z`)
+      if (searchName) query = query.ilike('patient_name', `%${searchName}%`)
+      if (startDate) query = query.gte('submitted_at', `${startDate}T00:00:00.000Z`)
+      if (endDate) query = query.lte('submitted_at', `${endDate}T23:59:59.999Z`)
 
-    if (sortBy === 'latest') query = query.order('submitted_at', { ascending: false })
-    else if (sortBy === 'oldest') query = query.order('submitted_at', { ascending: true })
-    else if (sortBy === 'name') query = query.order('patient_name', { ascending: true })
+      if (sortBy === 'latest') query = query.order('submitted_at', { ascending: false })
+      else if (sortBy === 'oldest') query = query.order('submitted_at', { ascending: true })
+      else if (sortBy === 'name') query = query.order('patient_name', { ascending: true })
 
-    const { data } = await query
-    if (data) setResponses(data)
-    setLoading(false)
+      const { data: resData, error: resError } = await query
+      
+      if (resError) throw resError
+
+      if (!resData || resData.length === 0) {
+        setResponses([])
+        return
+      }
+
+      // 2. Fetch Profiles for associated admin_ids (Bypasses PGRST200 join error)
+      const adminIds = Array.from(new Set(resData.map(r => r.admin_id).filter(Boolean)))
+      
+      let mergedData = resData
+      if (adminIds.length > 0) {
+        const { data: profileData, error: profileError } = await supabase
+          .from('profiles')
+          .select('id, nickname')
+          .in('id', adminIds)
+
+        if (!profileError && profileData) {
+          const profileMap = Object.fromEntries(profileData.map(p => [p.id, p]))
+          mergedData = resData.map(r => ({
+            ...r,
+            profiles: r.admin_id ? profileMap[r.admin_id] : null
+          }))
+        }
+      }
+
+      setResponses(mergedData || [])
+    } catch (err: any) {
+      console.error('Fetch error:', err)
+      setFetchError(`데이터 조회 실패: ${err.message || '알 수 없는 오류'}`)
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -92,6 +129,14 @@ export default function MasterResponsesPage() {
               <Trash2 className="w-4 h-4"/>
               🚨 전체 데이터 초기화
             </button>
+
+            <Link
+              href="/admin/dashboard"
+              className="flex items-center gap-2 px-5 py-2.5 bg-primary-900 text-white rounded-lg hover:bg-black transition-all shadow-lg font-bold text-sm"
+            >
+              <BarChart3 className="w-4 h-4 text-primary-300" />
+              통합 통계 대시보드
+            </Link>
 
             <button 
               onClick={() => alert("엑셀 내보내기 기능은 준비 중입니다.")}
@@ -209,6 +254,22 @@ export default function MasterResponsesPage() {
             </div>
           </div>
         </div>
+
+        {fetchError && (
+          <div className="mb-6 p-6 bg-red-50 border border-red-200 rounded-2xl flex items-start gap-4 animate-in slide-in-from-top-4">
+            <AlertTriangle className="w-6 h-6 text-red-600 flex-shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <h3 className="text-red-900 font-bold mb-1">데이터 로드 오류</h3>
+              <p className="text-red-700 text-sm">{fetchError}</p>
+              <button 
+                onClick={() => fetchResponses()}
+                className="mt-3 px-4 py-1.5 bg-red-600 text-white rounded-lg text-xs font-bold hover:bg-red-700 transition"
+              >
+                다시 시도하기
+              </button>
+            </div>
+          </div>
+        )}
         
         <div className="bg-white rounded-3xl shadow-sm border border-beige-200 overflow-hidden">
           <div className="p-6 border-b border-beige-100 bg-beige-50/30">
@@ -221,6 +282,7 @@ export default function MasterResponsesPage() {
                 <tr className="bg-beige-50 border-b border-beige-200">
                   <th className="p-5 font-medium text-gray-500 text-sm whitespace-nowrap">제출 일시</th>
                   <th className="p-5 font-medium text-gray-500 text-sm">참여 설문지</th>
+                  <th className="p-5 font-medium text-gray-500 text-sm">담당자</th>
                   <th className="p-5 font-medium text-gray-500 text-sm">성함</th>
                   <th className="p-5 font-medium text-gray-500 text-sm">연락처</th>
                   <th className="p-5 font-medium text-gray-500 text-sm">연령대</th>
@@ -230,26 +292,33 @@ export default function MasterResponsesPage() {
               </thead>
               <tbody>
                 {loading ? (
-                  <tr><td colSpan={7} className="p-12 text-center text-primary-500 animate-pulse font-medium">데이터를 분석 중입니다...</td></tr>
+                  <tr><td colSpan={8} className="p-12 text-center text-primary-500 animate-pulse font-medium">데이터를 분석 중입니다...</td></tr>
                 ) : responses.length === 0 ? (
-                  <tr><td colSpan={7} className="p-12 text-center text-gray-400">아직 등록된 고객 데이터가 없습니다.</td></tr>
+                  <tr><td colSpan={8} className="p-12 text-center text-gray-400">아직 등록된 고객 데이터가 없습니다.</td></tr>
                 ) : (
                   responses.map(res => {
-                    // Calculate total score from sector_results
+                    // Safety check for sector_results to prevent rendering crash
                     let totalScore = 0
-                    if (res.sector_results) {
+                    if (res.sector_results && typeof res.sector_results === 'object') {
                       Object.values(res.sector_results).forEach((sr: any) => {
-                        totalScore += Number(sr.score || 0)
+                        if (sr && typeof sr.score !== 'undefined') {
+                          totalScore += Number(sr.score || 0)
+                        }
                       })
                     }
                     
                     return (
-                      <tr key={res.id} className="border-b border-beige-100 hover:bg-beige-50/80 transition-colors">
-                        <td className="p-5 text-sm text-gray-500 whitespace-nowrap">{new Date(res.submitted_at).toLocaleString()}</td>
-                        <td className="p-5 text-sm font-medium text-primary-700 min-w-[200px] hover:underline cursor-pointer"><Link href={`/admin/surveys/${res.survey_id}`}>{res.surveys?.title || '알 수 없는 설문지'}</Link></td>
-                        <td className="p-5 text-sm font-medium text-gray-900">{res.patient_name || '-'}</td>
-                        <td className="p-5 text-sm text-gray-600 whitespace-nowrap">{res.patient_phone ? formatPhoneNumber(res.patient_phone) : '-'}</td>
-                        <td className="p-5 text-sm text-gray-600">{res.patient_age_group || '-'}</td>
+                      <tr key={res.id} className="border-b border-beige-100 hover:bg-beige-50/80 transition-colors text-sm">
+                        <td className="p-5 text-gray-500 whitespace-nowrap">{new Date(res.submitted_at).toLocaleString()}</td>
+                        <td className="p-5 font-medium text-primary-700 min-w-[200px] hover:underline cursor-pointer">
+                          <Link href={`/admin/surveys/${res.survey_id}`}>{res.surveys?.title || '알 수 없는 설문지'}</Link>
+                        </td>
+                        <td className="p-5 font-bold text-blue-600">
+                          {res.profiles?.nickname || '-'}
+                        </td>
+                        <td className="p-5 font-medium text-gray-900">{res.patient_name || '-'}</td>
+                        <td className="p-5 text-gray-600 whitespace-nowrap">{res.patient_phone ? formatPhoneNumber(res.patient_phone) : '-'}</td>
+                        <td className="p-5 text-gray-600">{res.patient_age_group || '-'}</td>
                         <td className="p-5 text-base font-bold text-primary-600">
                           {totalScore > 0 ? (
                             <span className="bg-primary-50 px-3 py-1 rounded-lg border border-primary-100 shadow-sm inline-block">{totalScore.toFixed(1)}</span>

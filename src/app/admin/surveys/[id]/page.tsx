@@ -3,11 +3,13 @@
 import { useEffect, useState } from 'react'
 import { useParams, useSearchParams } from 'next/navigation'
 import AdminGuard from '@/components/AdminGuard'
+import { useAuth } from '@/components/AuthProvider'
 import { supabase } from '@/lib/supabase'
 import { Link as LinkIcon, ArrowLeft, Sparkles } from 'lucide-react'
 import Link from 'next/link'
 
 export default function SurveyDetailPage() {
+  const { user } = useAuth()
   const params = useParams()
   const searchParams = useSearchParams()
   const [survey, setSurvey] = useState<any>(null)
@@ -69,15 +71,15 @@ export default function SurveyDetailPage() {
   }
 
   const copyLink = () => {
-    const url = `${typeof window !== 'undefined' ? window.location.origin : ''}/survey/${survey.id}`
+    const url = `${typeof window !== 'undefined' ? window.location.origin : ''}/survey/${survey.id}${user?.id ? `?admin_id=${user.id}` : ''}`
     navigator.clipboard.writeText(url)
-    alert('Link copied to clipboard!')
+    alert('담당자 정보가 포함된 링크가 복사되었습니다!')
   }
 
   if (loading) return <AdminGuard requireSuperAdmin={true}><div className="p-12 text-center text-primary-500 animate-pulse font-medium">설문지 세부 정보를 불러오는 중입니다...</div></AdminGuard>
   if (!survey) return <AdminGuard requireSuperAdmin={true}><div className="p-12 text-center text-red-500">해당 설문을 찾을 수 없습니다.</div></AdminGuard>
 
-  const publicUrl = `${typeof window !== 'undefined' ? window.location.origin : ''}/survey/${survey.id}`
+  const publicUrl = `${typeof window !== 'undefined' ? window.location.origin : ''}/survey/${survey.id}${user?.id ? `?admin_id=${user.id}` : ''}`
 
   return (
     <AdminGuard requireSuperAdmin={true}>
@@ -118,14 +120,6 @@ export default function SurveyDetailPage() {
               <LinkIcon className="w-5 h-5 text-gray-400" /> 링크 주소 복사하기
             </button>
             
-            {responseCount === 0 && (
-              <Link 
-                href={`/admin/surveys/${survey.id}/edit`}
-                className="w-full flex items-center justify-center gap-2 py-3.5 mt-2 bg-orange-50 border border-orange-200 text-orange-700 rounded-2xl hover:bg-orange-100 transition font-medium"
-              >
-                설문 내용 수정
-              </Link>
-            )}
           </div>
 
           <div className="w-full mt-8 pt-6 border-t border-gray-100 flex items-center justify-between px-2">
