@@ -150,9 +150,14 @@ function SurveyContent() {
       const ageGroup = `${Math.floor(age/10)*10}대`
 
       const decision = calculateFirstSessionDecision({
-        ...answers,
         symptoms: answers.conditions,
-        ageGroup
+        primaryCause: answers.primaryCause || standardResult?.mainReaction || '',
+        riskGrade: answers.riskGrade || 'R1',
+        ageGroup: ageGroup,
+        skinThickness: answers.skinThickness || '보통',
+        tissueType: answers.tissueType || '보통',
+        pigmentHigh: answers.pigmentHigh || false,
+        historyOfEasyMarking: answers.historyOfEasyMarking || false
       })
       setFirstSessionDecision(decision)
     }

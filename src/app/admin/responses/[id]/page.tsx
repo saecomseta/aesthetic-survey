@@ -90,10 +90,14 @@ export default function ResponseDetailPage() {
   const ageGroup = `${Math.floor((new Date().getFullYear() - birthDateObj.getFullYear()) / 10) * 10}대`
 
   const firstSessionDecision = calculateFirstSessionDecision({
-    ...rawAnswers,
     symptoms: conditions,
     primaryCause: standardResult.mainReaction,
-    ageGroup: ageGroup
+    riskGrade: rawAnswers.riskGrade || 'R1',
+    ageGroup: ageGroup,
+    skinThickness: rawAnswers.skinThickness || '보통',
+    tissueType: rawAnswers.tissueType || '보통',
+    pigmentHigh: rawAnswers.pigmentHigh || false,
+    historyOfEasyMarking: rawAnswers.historyOfEasyMarking || false
   })
 
   // Header helpers
