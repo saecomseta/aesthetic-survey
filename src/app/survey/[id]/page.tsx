@@ -8,20 +8,26 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { formatPhoneNumber } from '@/lib/format'
 import ReactMarkdown from 'react-markdown'
 import { ZONES, CONDITION_MAP as ALL_CONDITIONS, FIRST_SESSION_LOGIC, BACKGROUND_GUIDE_DATA } from '@/utils/standardData'
-import { calculateStandardResult, StandardResult } from '@/utils/standardEngine'
+import { calculateStandardResult, StandardResult, calculateRiskGrade } from '@/utils/standardEngine'
 import { calculateFirstSessionDecision, calculateProfileAnalysis } from '@/utils/firstSessionEngine'
 
 type Slide =
   | { type: 'info' }
-  | { type: 'step1' } // Zone selection
-  | { type: 'step2' } // Condition selection
-  | { type: 'step2-conclusion' } // Core selective selection
-  | { type: 'step3' } // Reveal Cause (Logic 1)
-  | { type: 'step3-risk' } // NEW: Select Risk Grade (R1-R4) Professional
-  | { type: 'step4-background' } // NEW: Select Thickness, Tissue, etc.
-  | { type: 'stop' } // Reveal Risk (Logic 1)
-  | { type: 'step4' } // Reveal Action Plan
-  | { type: 'step5-first-session' } // NEW: Final 1st Session Decision Reveal
+  | { type: 'step1' }
+  | { type: 'step2' }
+  | { type: 'step2-conclusion' }
+  | { type: 'step3' }
+  | { type: 'step4-background' }
+  | { type: 'stop' }
+  | { type: 'step4' }
+  | { type: 'step5-first-session' }
+
+const RISK_DETAILS: Record<string, { label: string; desc: string; color: string; bg: string; text: string }> = {
+  'R1': { label: 'R1 안정군', desc: '자유로운 관리 접근 가능 (STABLE)', color: 'border-green-200', bg: 'bg-green-50', text: 'text-green-700' },
+  'R2': { label: 'R2 주의군', desc: '강도 하향 및 보수적 접근 (CAUTION)', color: 'border-yellow-200', bg: 'bg-yellow-50', text: 'text-yellow-700' },
+  'R3': { label: 'R3 고반응군', desc: '압출/박리 보류, 진정 우선 (REACTIVE)', color: 'border-orange-200', bg: 'bg-orange-50', text: 'text-orange-700' },
+  'R4': { label: 'R4 고위험군', desc: '무조건 안정화, 적극적 개입 금지 (HIGH RISK)', color: 'border-red-200', bg: 'bg-red-50', text: 'text-red-700' }
+}
 
 function SurveyContent() {
   const params = useParams()
@@ -57,7 +63,6 @@ function SurveyContent() {
     { type: 'step2' },
     { type: 'step2-conclusion' },
     { type: 'step3' },
-    { type: 'step3-risk' },
     { type: 'step4-background' },
     { type: 'stop' },
     { type: 'step4' },
@@ -149,10 +154,15 @@ function SurveyContent() {
       let age = today.getFullYear() - birthDateObj.getFullYear()
       const ageGroup = `${Math.floor(age/10)*10}대`
 
+      // 1. Automatically calculate risk grade from previous data
+      const calculatedRisk = calculateRiskGrade(answers.conditions, answers.skinThickness, ageGroup)
+      setAnswers(prev => ({ ...prev, riskGrade: calculatedRisk }))
+
+      // 2. Recalculate everything for the next result steps
       const decision = calculateFirstSessionDecision({
         symptoms: answers.conditions,
         primaryCause: answers.primaryCause || standardResult?.mainReaction || '',
-        riskGrade: answers.riskGrade || 'R1',
+        riskGrade: calculatedRisk,
         ageGroup: ageGroup,
         skinThickness: answers.skinThickness || '보통',
         tissueType: answers.tissueType || '보통',
@@ -297,15 +307,26 @@ function SurveyContent() {
           </div>
           
           <div className={`p-8 md:p-12 ${standardResult.isHighRisk ? 'bg-red-50' : 'bg-primary-50/30'}`}>
-            <div className="flex items-start gap-5">
-              <div className={`w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0 ${standardResult.isHighRisk ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'}`}>
-                {standardResult.isHighRisk ? <AlertTriangle className="w-6 h-6" /> : <CheckCircle2 className="w-6 h-6" />}
+            <div className="flex flex-col md:flex-row items-center md:items-start gap-8">
+              <div className="flex flex-col items-center gap-4 flex-shrink-0">
+                <div className={`w-16 h-16 rounded-2xl flex items-center justify-center ${standardResult.isHighRisk ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'}`}>
+                  {standardResult.isHighRisk ? <AlertTriangle className="w-8 h-8" /> : <CheckCircle2 className="w-8 h-8" />}
+                </div>
+                <div className={`px-4 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${standardResult.isHighRisk ? 'bg-red-600 text-white' : 'bg-green-600 text-white'}`}>
+                  Confirmed
+                </div>
               </div>
-              <div>
-                <h3 className={`text-lg font-bold mb-1 ${standardResult.isHighRisk ? 'text-red-900' : 'text-primary-900'}`}>
-                  {standardResult.isHighRisk ? '리스크 점검: 주의 필요' : '관리 진행 상의 리스크: 낮음'}
-                </h3>
-                <p className="text-gray-600 leading-relaxed">
+              
+              <div className="flex-1 text-center md:text-left">
+                <div className="flex flex-col md:flex-row md:items-center gap-x-4 mb-3">
+                  <h3 className={`text-xl font-bold ${standardResult.isHighRisk ? 'text-red-900' : 'text-primary-900'}`}>
+                    {standardResult.isHighRisk ? '점검 결과: 무리한 관리 주의' : '점검 결과: 안정군 판정'}
+                  </h3>
+                  <div className={`inline-block px-3 py-1 rounded-lg text-sm font-black mt-2 md:mt-0 ${RISK_DETAILS[answers.riskGrade || 'R1'].bg} ${RISK_DETAILS[answers.riskGrade || 'R1'].text} border ${RISK_DETAILS[answers.riskGrade || 'R1'].color}`}>
+                    {RISK_DETAILS[answers.riskGrade || 'R1'].label}
+                  </div>
+                </div>
+                <p className="text-gray-600 leading-relaxed max-w-xl">
                   {standardResult.isHighRisk 
                     ? '현재 피부는 자극 시 반응이 급격히 확대될 수 있는 고위험군 요소가 포함되어 있습니다. 무리한 관리보다는 안정화와 비개입적 접근이 최우선입니다.' 
                     : '현재 피부는 특별한 열감이나 확산 징후가 없는 안정적인 상태입니다. 설계된 방향에 따라 정상적인 관리 진행이 풍부한 효과를 낼 수 있습니다.'}
@@ -461,7 +482,7 @@ function SurveyContent() {
             SOMEGOOD STANDARD
           </h1>
           <span className="text-sm font-medium text-gray-400 bg-gray-50 px-2 py-1 rounded-md">
-            {step + 1} / 7 단계
+            {step + 1} / {slides.length} 단계
           </span>
         </div>
       </div>
@@ -644,38 +665,12 @@ function SurveyContent() {
               </div>
             )}
 
-            {/* NEW: Step 3-Risk: Risk Grade Selection */}
-            {currentSlide.type === 'step3-risk' && (
-              <div className="bg-white rounded-3xl shadow-sm border border-primary-100 p-8 md:p-10">
-                <div className="text-center mb-10">
-                  <h2 className="text-2xl font-light text-primary-800 mb-2">STEP 4. 전문가 리스크 판정</h2>
-                  <p className="text-gray-400 text-sm">현재 피부가 감당할 수 있는 자극의 범위를 선택해주세요.</p>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {[
-                    { id: 'R1', label: 'R1 안정군', desc: '자유로운 관리 접근 가능', color: 'bg-green-50 text-green-700 border-green-200' },
-                    { id: 'R2', label: 'R2 주의군', desc: '강도 하향 및 보수적 접근', color: 'bg-yellow-50 text-yellow-700 border-yellow-200' },
-                    { id: 'R3', label: 'R3 고반응군', desc: '압출/박리 보류, 진정 우선', color: 'bg-orange-50 text-orange-700 border-orange-200' },
-                    { id: 'R4', label: 'R4 고위험군', desc: '무조건 안정화, 적극적 개입 금지', color: 'bg-red-50 text-red-700 border-red-200' }
-                  ].map(grade => (
-                    <button 
-                      key={grade.id}
-                      onClick={() => setAnswers(prev => ({ ...prev, riskGrade: grade.id }))}
-                      className={`text-left p-6 rounded-2xl border-2 transition-all duration-300 ${answers.riskGrade === grade.id ? `${grade.color} ring-4 ring-primary-100 shadow-md` : 'bg-gray-50 border-gray-100 text-gray-500'}`}
-                    >
-                      <div className="font-bold text-lg mb-1">{grade.label}</div>
-                      <div className="text-xs opacity-70">{grade.desc}</div>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
 
             {/* NEW: Step 4-Background: Detailed Factors */}
             {currentSlide.type === 'step4-background' && (
               <div className="bg-white rounded-3xl shadow-sm border border-primary-100 p-8 md:p-10 space-y-10">
                 <div className="text-center">
-                  <h2 className="text-2xl font-light text-primary-800 mb-2">STEP 5. 피부 배경 조건</h2>
+                  <h2 className="text-2xl font-light text-primary-800 mb-2">STEP 4. 피부 배경 조건</h2>
                   <p className="text-gray-400 text-sm">보다 정교한 1회차 설계를 위해 피부의 물리적 특성을 확인합니다.</p>
                 </div>
 
@@ -767,9 +762,21 @@ function SurveyContent() {
                     : '현재 피부는 특별한 열감이나 확산 징후가 없는 안정적인 상태입니다. 설계된 방향에 따라 관리를 진행할 수 있습니다.'}
                 </p>
                 
-                <div className={`inline-flex items-center gap-2 px-6 py-3 rounded-full font-bold text-sm ${standardResult.isHighRisk ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
-                  위험도: {standardResult.isHighRisk ? '높음 (주의 요망)' : '낮음 (안정적)'}
-                </div>
+                {/* Prominent Risk Grade Card */}
+                <motion.div 
+                  initial={{ y: 20, opacity: 0 }}
+                  animate={{ y: 0, opacity: 1 }}
+                  transition={{ delay: 0.5 }}
+                  className={`mt-6 p-6 rounded-3xl border-2 ${RISK_DETAILS[answers.riskGrade || 'R1'].bg} ${RISK_DETAILS[answers.riskGrade || 'R1'].color} flex flex-col items-center gap-2`}
+                >
+                   <div className={`text-xs font-black uppercase tracking-[0.2em] opacity-50 ${RISK_DETAILS[answers.riskGrade || 'R1'].text}`}>Diagnostic Grade</div>
+                   <div className={`text-3xl font-black ${RISK_DETAILS[answers.riskGrade || 'R1'].text}`}>
+                     {RISK_DETAILS[answers.riskGrade || 'R1'].label}
+                   </div>
+                   <div className={`text-sm font-medium opacity-80 ${RISK_DETAILS[answers.riskGrade || 'R1'].text}`}>
+                     {RISK_DETAILS[answers.riskGrade || 'R1'].desc}
+                   </div>
+                </motion.div>
               </div>
             )}
 

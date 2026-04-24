@@ -124,3 +124,38 @@ export function calculateStandardResult(zones: string[], conditions: string[], c
     brandMessage: 'Freedom Begins with Clear Body Skin'
   };
 }
+
+/**
+ * Automatically calculates the Risk Grade (R1-R4) based on symptoms, thickness, and age.
+ */
+export function calculateRiskGrade(conditions: string[], skinThickness: string, ageGroup: string): string {
+  // 1. Level 4 (High Risk) Conditions
+  const hasR4Condition = conditions.some(c => 
+    RISK_KEYWORDS.some(k => c.includes(k)) || 
+    CONDITION_MAP[c]?.reactionType === '질환' ||
+    CONDITION_MAP[c]?.category === '바이러스'
+  );
+
+  if (hasR4Condition || skinThickness === '극도로 얇음') {
+    return 'R4';
+  }
+
+  // 2. Level 3 (High Reactive)
+  const isVeryThin = skinThickness === '매우 얇음';
+  const hasInflammation = conditions.some(c => CONDITION_MAP[c]?.reactionType === '염증');
+  
+  if (isVeryThin || (hasInflammation && ['40대', '50대 이상'].includes(ageGroup))) {
+    return 'R3';
+  }
+
+  // 3. Level 2 (Caution)
+  const isThin = skinThickness === '얇은 편';
+  const hasVascular = conditions.some(c => CONDITION_MAP[c]?.reactionType === '혈관');
+
+  if (isThin || ['40대', '50대 이상'].includes(ageGroup) || hasVascular) {
+    return 'R2';
+  }
+
+  // 4. Level 1 (Stable)
+  return 'R1';
+}

@@ -229,9 +229,44 @@ export default function LogicViewer() {
             </div>
           </div>
 
+          <div className="bg-white rounded-[2.5rem] p-8 border border-beige-200 shadow-sm relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-red-50 rounded-full -mr-16 -mt-16 opacity-50"></div>
+            <h2 className="text-2xl font-light text-primary-900 mb-6 flex items-center gap-3">
+                <span className="w-8 h-8 rounded-full bg-red-100 flex items-center justify-center text-sm font-bold text-red-700 font-mono">02</span>
+                리스크 등급 자동 판정 로직 (Auto-Risk Analysis)
+            </h2>
+            
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+              {[
+                { id: 'R4', title: '고위험군 (High Risk)', criteria: '질환/바이러스 증상 보유 또는 극도로 얇은 살성', focus: '적극적 개입 절대 금지' },
+                { id: 'R3', title: '고반응군 (Reactive)', criteria: '매우 얇은 살성 또는 40대 이상 염증성 피부', focus: '진정/장벽 강화 우선' },
+                { id: 'R2', title: '주의군 (Caution)', criteria: '얇은 살성 또는 40대 이상 일반 피부 / 혈관성 반응', focus: '보수적 강도 설정' },
+                { id: 'R1', title: '안정군 (Stable)', criteria: '안정적인 두께 및 일반 면포/정체성 피부', focus: '표준 관리 설계' }
+              ].map(r => (
+                <div key={r.id} className="p-5 rounded-2xl border border-gray-100 bg-gray-50/50">
+                  <div className={`text-xs font-bold mb-2 ${r.id === 'R4' ? 'text-red-600' : r.id === 'R3' ? 'text-orange-500' : 'text-primary-600'}`}>{r.id} {r.title}</div>
+                  <div className="text-xs text-gray-500 mb-2 leading-tight">조건: {r.criteria}</div>
+                  <div className="text-[10px] font-bold text-gray-400 uppercase tracking-tighter">Focus: {r.focus}</div>
+                </div>
+              ))}
+            </div>
+
+            <div className="p-6 bg-red-50/50 rounded-2xl border border-red-100">
+               <h4 className="text-xs font-bold text-red-800 mb-3 uppercase tracking-widest flex items-center gap-2">
+                 <Info className="w-3.5 h-3.5" /> 알잘딱깔센 판정 규칙 (Smart Rules)
+               </h4>
+               <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-2 text-xs text-red-900/70">
+                  <p>• <strong>켈로이드/건선/사마귀</strong> 발견 시 무조건 <strong>R4</strong> 고정</p>
+                  <p>• <strong>40대 이상</strong> + <strong>염증성 반응</strong> 확인 시 리스크 레벨 <strong>+1 상향</strong></p>
+                  <p>• <strong>PIE(혈관성 붉음)</strong> 관찰 시 최소 <strong>R2</strong> 이상 보수적 판정</p>
+                  <p>• <strong>극도로 얇은 피부</strong>는 증상과 관계없이 최상위 리스크(<strong>R4</strong>) 부여</p>
+               </div>
+            </div>
+          </div>
+
           <div className="bg-white rounded-[2.5rem] p-8 border border-beige-200 shadow-sm">
             <h2 className="text-2xl font-light text-primary-900 mb-6 flex items-center gap-3">
-                <span className="w-8 h-8 rounded-full bg-primary-100 flex items-center justify-center text-sm font-bold text-primary-700">02</span>
+                <span className="w-8 h-8 rounded-full bg-primary-100 flex items-center justify-center text-sm font-bold text-primary-700">03</span>
                 피부 배경 지표 로직 (Physical Factors)
             </h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">

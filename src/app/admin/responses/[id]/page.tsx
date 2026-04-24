@@ -14,8 +14,15 @@ import { formatPhoneNumber } from '@/lib/format'
 import { motion, AnimatePresence } from 'framer-motion'
 
 // LITERALLY IMPORT THE ENGINE (Same as survey page)
-import { calculateStandardResult } from '@/utils/standardEngine'
+import { calculateStandardResult, calculateRiskGrade } from '@/utils/standardEngine'
 import { calculateFirstSessionDecision, calculateProfileAnalysis } from '@/utils/firstSessionEngine'
+
+const RISK_DETAILS: Record<string, { label: string; desc: string; color: string; bg: string; text: string }> = {
+  'R1': { label: 'R1 안정군', desc: '자유로운 관리 접근 가능 (STABLE)', color: 'border-green-200', bg: 'bg-green-50', text: 'text-green-700' },
+  'R2': { label: 'R2 주의군', desc: '강도 하향 및 보수적 접근 (CAUTION)', color: 'border-yellow-200', bg: 'bg-yellow-50', text: 'text-yellow-700' },
+  'R3': { label: 'R3 고반응군', desc: '압출/박리 보류, 진정 우선 (REACTIVE)', color: 'border-orange-200', bg: 'bg-orange-50', text: 'text-orange-700' },
+  'R4': { label: 'R4 고위험군', desc: '무조건 안정화, 적극적 개입 금지 (HIGH RISK)', color: 'border-red-200', bg: 'bg-red-50', text: 'text-red-700' }
+}
 
 export default function ResponseDetailPage() {
   const { user, role } = useAuth()
@@ -201,15 +208,23 @@ export default function ResponseDetailPage() {
             </div>
             
             <div className={`p-8 md:p-12 ${standardResult.isHighRisk ? 'bg-red-50' : 'bg-primary-50/30'}`}>
-              <div className="flex items-start gap-5">
-                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0 ${standardResult.isHighRisk ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'}`}>
-                  {standardResult.isHighRisk ? <AlertTriangle className="w-6 h-6" /> : <CheckCircle2 className="w-6 h-6" />}
+              <div className="flex flex-col md:flex-row items-center md:items-start gap-8">
+                <div className="flex flex-col items-center gap-4 flex-shrink-0">
+                  <div className={`w-16 h-16 rounded-2xl flex items-center justify-center ${standardResult.isHighRisk ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'}`}>
+                    {standardResult.isHighRisk ? <AlertTriangle className="w-8 h-8" /> : <CheckCircle2 className="w-8 h-8" />}
+                  </div>
                 </div>
-                <div>
-                  <h3 className={`text-lg font-bold mb-1 ${standardResult.isHighRisk ? 'text-red-900' : 'text-primary-900'}`}>
-                    {standardResult.isHighRisk ? '리스크 점검: 주의 필요' : '관리 진행 상의 리스크: 낮음'}
-                  </h3>
-                  <p className="text-gray-600 leading-relaxed">
+                
+                <div className="flex-1 text-center md:text-left">
+                  <div className="flex flex-col md:flex-row md:items-center gap-x-4 mb-3">
+                    <h3 className={`text-xl font-bold ${standardResult.isHighRisk ? 'text-red-900' : 'text-primary-900'}`}>
+                      {standardResult.isHighRisk ? '리스크 점검: 주의 필요' : '관리 진행 상의 리스크: 낮음'}
+                    </h3>
+                    <div className={`inline-block px-3 py-1 rounded-lg text-sm font-black mt-2 md:mt-0 ${RISK_DETAILS[response.answers.riskGrade || 'R1'].bg} ${RISK_DETAILS[response.answers.riskGrade || 'R1'].text} border ${RISK_DETAILS[response.answers.riskGrade || 'R1'].color}`}>
+                      {RISK_DETAILS[response.answers.riskGrade || 'R1'].label}
+                    </div>
+                  </div>
+                  <p className="text-gray-600 leading-relaxed max-w-xl mx-auto md:mx-0">
                     {standardResult.isHighRisk 
                       ? '현재 피부는 자극 시 반응이 급격히 확대될 수 있는 고위험군 요소가 포함되어 있습니다. 무리한 관리보다는 안정화와 비개입적 접근이 최우선입니다.' 
                       : '현재 피부는 특별한 열감이나 확산 징후가 없는 안정적인 상태입니다. 설계된 방향에 따라 정상적인 관리 진행이 풍부한 효과를 낼 수 있습니다.'}
