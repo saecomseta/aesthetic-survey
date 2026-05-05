@@ -1,0 +1,327 @@
+'use client'
+
+import React, { useState } from 'react'
+import { CONDITION_MAP, CONCLUSIONS, CAUSE_MAP_USER, PRIORITY_MAP, FIRST_SESSION_LOGIC } from '@/utils/standardData'
+import { ArrowLeft, Search, Filter, Info, ShieldCheck } from 'lucide-react'
+import Link from 'next/link'
+
+export default function LogicViewer() {
+  const [searchTerm, setSearchTerm] = useState('')
+  const [filterCategory, setFilterCategory] = useState('ALL')
+  const [activeTab, setActiveTab] = useState<'standard' | 'first-session'>('standard')
+
+  const conditions = Object.entries(CONDITION_MAP).map(([name, data]) => ({
+    name,
+    ...data
+  }))
+
+  const filteredConditions = conditions.filter(c => {
+    const matchesSearch = c.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                          c.cause.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesCategory = filterCategory === 'ALL' || c.category === filterCategory;
+    return matchesSearch && matchesCategory;
+  })
+
+  const categories = Array.from(new Set(conditions.map(c => c.category)));
+
+  return (
+    <div className="max-w-7xl mx-auto p-4 md:p-10 space-y-8 pb-32">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+        <div>
+          <div className="flex items-center gap-3 mb-2">
+            <Link href="/admin/main" className="p-2 hover:glass-card rounded-xl transition-colors border border-transparent hover:border-white/10">
+              <ArrowLeft className="w-5 h-5 text-brand-text/70" />
+            </Link>
+            <h1 className="text-3xl font-light text-brand-text leading-tight">진단 시스템 로직 설계도</h1>
+          </div>
+          <p className="text-brand-text/70 ml-12">SOMEGOOD STANDARD의 24개 항목 진단 알고리즘 및 매핑 데이터입니다.</p>
+        </div>
+        <div className="bg-black/20 text-white px-5 py-3 rounded-2xl flex items-center gap-3 shadow-lg">
+          <ShieldCheck className="w-5 h-5 text-primary-400" />
+          <span className="font-bold">MASTER VIEW ONLY</span>
+        </div>
+      </div>
+
+      {/* Tab Switching */}
+      <div className="flex border-b border-white/10">
+        <button 
+          onClick={() => setActiveTab('standard')}
+          className={`px-8 py-4 font-bold text-sm transition-all relative ${activeTab === 'standard' ? 'text-brand-text' : 'text-brand-text/60 hover:text-brand-text/80'}`}
+        >
+          기초 진단 로직 (Standard)
+          {activeTab === 'standard' && <div className="absolute bottom-0 left-0 w-full h-1 bg-black/20 rounded-t-full" />}
+        </button>
+        <button 
+          onClick={() => setActiveTab('first-session')}
+          className={`px-8 py-4 font-bold text-sm transition-all relative ${activeTab === 'first-session' ? 'text-brand-text' : 'text-brand-text/60 hover:text-brand-text/80'}`}
+        >
+          1회차 결정 알고리즘 (First Session)
+          {activeTab === 'first-session' && <div className="absolute bottom-0 left-0 w-full h-1 bg-black/20 rounded-t-full" />}
+        </button>
+      </div>
+
+      {activeTab === 'standard' ? (
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-8 animate-in fade-in slide-in-from-bottom-2 duration-300">
+        {/* Sidebar Filters */}
+        <div className="lg:col-span-1 space-y-6">
+          <div className="glass-card rounded-[2rem] p-6 border border-white/10 shadow-sm space-y-6">
+            <div>
+              <label className="block text-xs font-bold text-brand-text/60 uppercase tracking-widest mb-3 ml-1">항목명/원인 검색</label>
+              <div className="relative">
+                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-brand-text/60" />
+                <input 
+                  type="text" 
+                  placeholder="증상 검색..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full pl-9 pr-4 py-3 bg-black/10 border border-beige-100 rounded-xl outline-none focus:ring-2 focus:ring-primary-500 text-sm"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-brand-text/60 uppercase tracking-widest mb-3 ml-1">카테고리 필터</label>
+              <div className="space-y-1.5">
+                <button 
+                  onClick={() => setFilterCategory('ALL')}
+                  className={`w-full text-left px-4 py-2.5 rounded-xl text-sm transition-all ${filterCategory === 'ALL' ? 'glass-button text-white font-bold shadow-md' : 'text-brand-text/80 hover:bg-black/10'}`}
+                >
+                  전체 보기
+                </button>
+                {categories.map(cat => (
+                  <button 
+                    key={cat}
+                    onClick={() => setFilterCategory(cat)}
+                    className={`w-full text-left px-4 py-2.5 rounded-xl text-sm transition-all ${filterCategory === cat ? 'glass-button text-white font-bold shadow-md' : 'text-brand-text/80 hover:bg-black/10'}`}
+                  >
+                    {cat}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white/5 rounded-2xl p-6 border border-white/20">
+            <h4 className="text-brand-text font-bold text-sm mb-3 flex items-center gap-2">
+              <Info className="w-4 h-4" /> 알고리즘 안내
+            </h4>
+            <p className="text-xs text-brand-text/70 leading-relaxed">
+              본 로직은 <strong>Priority Priority</strong>에 따라 다중 증상 중 무엇을 핵심 원인으로 볼지 결정합니다.<br/>
+              현재 우선순위: 염증(1) &gt; 피지(2) &gt; 각질(3) &gt; 색소(4) &gt; 혈관(5) &gt; 질환(6)
+            </p>
+          </div>
+        </div>
+
+        {/* Content Table */}
+        <div className="lg:col-span-3">
+          <div className="glass-card rounded-[2rem] border border-white/10 shadow-sm overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-black/10 border-b border-beige-100">
+                    <th className="p-5 pl-8 text-xs font-bold text-brand-text/70 uppercase tracking-widest">증상명</th>
+                    <th className="p-5 text-xs font-bold text-brand-text/70 uppercase tracking-widest">분류 / 반응</th>
+                    <th className="p-5 text-xs font-bold text-brand-text/70 uppercase tracking-widest">진단 원인</th>
+                    <th className="p-5 pr-8 text-xs font-bold text-brand-text/70 uppercase tracking-widest">매핑된 해결 방향</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {filteredConditions.map((c, i) => (
+                    <tr key={i} className="hover:bg-white/5/30 transition-colors">
+                      <td className="p-5 pl-8">
+                        <span className="font-bold text-brand-text block">{c.name}</span>
+                        <span className="text-[10px] bg-white/5 text-brand-text/70 px-1.5 py-0.5 rounded mt-1 inline-block uppercase font-bold tracking-tighter">Priority {PRIORITY_MAP[c.reactionType]}</span>
+                      </td>
+                      <td className="p-5">
+                        <span className="text-xs font-medium text-brand-text/70 block mb-1">{c.category}</span>
+                        <span className={`text-[11px] px-2 py-0.5 rounded-full font-bold border ${
+                          c.reactionType === '염증' ? 'bg-red-900/30 text-red-600 border-red-100' :
+                          c.reactionType === '피지/정체' ? 'bg-yellow-50 text-yellow-700 border-yellow-100' :
+                          c.reactionType === '색소' ? 'bg-purple-50 text-purple-600 border-purple-100' :
+                          'bg-white/5 text-brand-text border-white/20'
+                        }`}>
+                          {c.reactionType}
+                        </span>
+                      </td>
+                      <td className="p-5">
+                        <span className="text-sm font-medium text-brand-text block">{c.cause}</span>
+                        <span className="text-[11px] text-brand-text/60 leading-tight block mt-1">{CAUSE_MAP_USER[c.cause]}</span>
+                      </td>
+                      <td className="p-5 pr-8">
+                        <div className="flex flex-wrap gap-1">
+                          {c.conclusions.map(id => (
+                            <span key={id} className="text-[11px] glass-card border border-white/10 text-brand-text/80 px-2 py-1 rounded-lg">
+                              {CONCLUSIONS[id]}
+                            </span>
+                          ))}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {filteredConditions.length === 0 && (
+              <div className="p-20 text-center text-brand-text/60 font-medium">검색 결과가 없습니다.</div>
+            )}
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-12 animate-in fade-in slide-in-from-bottom-2 duration-300">
+          <div className="bg-black/20 text-white p-8 rounded-[2.5rem] shadow-xl">
+            <h2 className="text-2xl font-light mb-6 flex items-center gap-3">
+              <span className="w-8 h-8 rounded-full glass-card/20 flex items-center justify-center text-sm font-bold">01</span>
+              1회차 매핑 가중치 (Weights)
+            </h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              <div className="glass-card/5 rounded-2xl p-6 border border-white/10">
+                <h4 className="text-primary-300 text-xs font-bold mb-4 uppercase tracking-widest">주 증상별 가중치</h4>
+                <div className="space-y-3">
+                  {Object.entries(FIRST_SESSION_LOGIC.symptomWeights).map(([name, weights]: [string, any]) => (
+                    <div key={name} className="flex justify-between items-center text-xs">
+                      <span className="text-white/80">{name}</span>
+                      <div className="flex gap-2">
+                        {Object.entries(weights).map(([target, val]: [string, any]) => (
+                          <span key={target} className={`px-1.5 py-0.5 rounded ${val > 0 ? 'bg-green-500/20 text-green-300' : 'bg-red-900/300/20 text-red-300'}`}>
+                            {target[0].toUpperCase()}:{val > 0 ? `+${val}` : val}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="glass-card/5 rounded-2xl p-6 border border-white/10">
+                <h4 className="text-primary-300 text-xs font-bold mb-4 uppercase tracking-widest">주 원인별 가중치</h4>
+                <div className="space-y-3">
+                  {Object.entries(FIRST_SESSION_LOGIC.causeWeights).map(([name, weights]: [string, any]) => (
+                    <div key={name} className="flex justify-between items-center text-xs">
+                      <span className="text-white/80">{name}</span>
+                      <div className="flex gap-2">
+                        {Object.entries(weights).map(([target, val]: [string, any]) => (
+                          <span key={target} className={`px-1.5 py-0.5 rounded ${val > 0 ? 'bg-green-500/20 text-green-300' : 'bg-red-900/300/20 text-red-300'}`}>
+                            {target[0].toUpperCase()}:{val > 0 ? `+${val}` : val}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="glass-card/5 rounded-2xl p-6 border border-white/10">
+                <h4 className="text-primary-300 text-xs font-bold mb-4 uppercase tracking-widest">리스크별 보정</h4>
+                <div className="space-y-3">
+                  {Object.entries(FIRST_SESSION_LOGIC.riskWeights).map(([name, weights]: [string, any]) => (
+                    <div key={name} className="flex justify-between items-center text-xs">
+                      <span className="text-white/80 font-bold">{name}</span>
+                      <div className="flex gap-2">
+                        {Object.entries(weights).map(([target, val]: [string, any]) => (
+                          <span key={target} className={`px-1.5 py-0.5 rounded ${val > 0 ? 'bg-orange-500/20 text-orange-300' : 'bg-red-900/300/20 text-red-300'}`}>
+                            {target[0].toUpperCase()}:{val > 0 ? `+${val}` : val}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="glass-card rounded-[2.5rem] p-8 border border-white/10 shadow-sm relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-red-900/30 rounded-full -mr-16 -mt-16 opacity-50"></div>
+            <h2 className="text-2xl font-light text-brand-text mb-6 flex items-center gap-3">
+                <span className="w-8 h-8 rounded-full bg-red-100 flex items-center justify-center text-sm font-bold text-red-700 font-mono">02</span>
+                리스크 등급 자동 판정 로직 (Auto-Risk Analysis)
+            </h2>
+            
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+              {[
+                { id: 'R4', title: '고위험군 (High Risk)', criteria: '질환/바이러스 증상 보유 또는 극도로 얇은 살성', focus: '적극적 개입 절대 금지' },
+                { id: 'R3', title: '고반응군 (Reactive)', criteria: '매우 얇은 살성 또는 40대 이상 염증성 피부', focus: '진정/장벽 강화 우선' },
+                { id: 'R2', title: '주의군 (Caution)', criteria: '얇은 살성 또는 40대 이상 일반 피부 / 혈관성 반응', focus: '보수적 강도 설정' },
+                { id: 'R1', title: '안정군 (Stable)', criteria: '안정적인 두께 및 일반 면포/정체성 피부', focus: '표준 관리 설계' }
+              ].map(r => (
+                <div key={r.id} className="p-5 rounded-2xl border border-white/10 bg-black/10/50">
+                  <div className={`text-xs font-bold mb-2 ${r.id === 'R4' ? 'text-red-600' : r.id === 'R3' ? 'text-orange-500' : 'text-brand-text'}`}>{r.id} {r.title}</div>
+                  <div className="text-xs text-brand-text/70 mb-2 leading-tight">조건: {r.criteria}</div>
+                  <div className="text-[10px] font-bold text-brand-text/60 uppercase tracking-tighter">Focus: {r.focus}</div>
+                </div>
+              ))}
+            </div>
+
+            <div className="p-6 bg-red-900/30/50 rounded-2xl border border-red-100">
+               <h4 className="text-xs font-bold text-red-800 mb-3 uppercase tracking-widest flex items-center gap-2">
+                 <Info className="w-3.5 h-3.5" /> 알잘딱깔센 판정 규칙 (Smart Rules)
+               </h4>
+               <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-2 text-xs text-red-900/70">
+                  <p>• <strong>켈로이드/건선/사마귀</strong> 발견 시 무조건 <strong>R4</strong> 고정</p>
+                  <p>• <strong>40대 이상</strong> + <strong>염증성 반응</strong> 확인 시 리스크 레벨 <strong>+1 상향</strong></p>
+                  <p>• <strong>PIE(혈관성 붉음)</strong> 관찰 시 최소 <strong>R2</strong> 이상 보수적 판정</p>
+                  <p>• <strong>극도로 얇은 피부</strong>는 증상과 관계없이 최상위 리스크(<strong>R4</strong>) 부여</p>
+               </div>
+            </div>
+          </div>
+
+          <div className="glass-card rounded-[2.5rem] p-8 border border-white/10 shadow-sm">
+            <h2 className="text-2xl font-light text-brand-text mb-6 flex items-center gap-3">
+                <span className="w-8 h-8 rounded-full bg-primary-100 flex items-center justify-center text-sm font-bold text-brand-text">03</span>
+                피부 배경 지표 로직 (Physical Factors)
+            </h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              <div className="space-y-4">
+                <h4 className="text-sm font-bold text-brand-text/60 uppercase tracking-widest">피부 두께 (Thickness)</h4>
+                <div className="overflow-hidden rounded-2xl border border-white/10">
+                  <table className="w-full text-xs text-left">
+                    <thead className="bg-black/10 border-b border-white/10">
+                      <tr>
+                        <th className="p-3">항목</th>
+                        <th className="p-3">가중치 적용</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50">
+                      {Object.entries(FIRST_SESSION_LOGIC.skinThicknessWeights).map(([name, weights]: [string, any]) => (
+                        <tr key={name}>
+                          <td className="p-3 font-medium text-brand-text/90">{name}</td>
+                          <td className="p-3">
+                            <div className="flex gap-1 flex-wrap">
+                              {Object.entries(weights).map(([t, v]: [string, any]) => (
+                                <span key={t} className="bg-white/5 text-brand-text px-1.5 py-0.5 rounded-md">{t[0]}:{v>0?`+${v}`:v}</span>
+                              ))}
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              <div className="space-y-4">
+                <h4 className="text-sm font-bold text-brand-text/60 uppercase tracking-widest">결정 우선순위 (Tie-breaker)</h4>
+                <div className="flex flex-wrap gap-3">
+                  {FIRST_SESSION_LOGIC.priorityIfTie.map((target: string, i: number) => (
+                    <div key={target} className="flex items-center gap-2 bg-transparent px-4 py-2 rounded-xl border border-beige-100">
+                      <span className="w-6 h-6 rounded-full bg-black/20 text-white flex items-center justify-center text-[10px] font-bold">{i+1}</span>
+                      <span className="text-sm font-bold text-brand-text capitalize">{target}</span>
+                    </div>
+                  ))}
+                </div>
+                <div className="bg-white/5 p-6 rounded-2xl border border-white/20 mt-4">
+                  <h5 className="text-xs font-bold text-brand-text mb-2 uppercase tracking-widest flex items-center gap-2">
+                    <ShieldCheck className="w-3.5 h-3.5" /> 강제 분기 규칙 (Hard Rules)
+                  </h5>
+                  <ul className="text-xs text-brand-text space-y-2 leading-relaxed">
+                    <li>• 리스크 <strong>R3/R4</strong> + <strong>얇은 피부</strong>: 장벽/진정 강제</li>
+                    <li>• <strong>색소 경향 높음</strong> + <strong>손상 이력</strong>: 흔적 최소화/장벽 강제</li>
+                    <li>• <strong>두꺼운 피부</strong> + <strong>단단한 살성</strong> + <strong>낮은 리스크</strong>: 정체 해소 고점 보정</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}

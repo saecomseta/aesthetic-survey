@@ -1,0 +1,149 @@
+'use client'
+
+import { useEffect, useState } from 'react'
+import { useParams, useSearchParams } from 'next/navigation'
+import AdminGuard from '@/components/AdminGuard'
+import { useAuth } from '@/components/AuthProvider'
+import { supabase } from '@/lib/supabase'
+import { Link as LinkIcon, ArrowLeft, Sparkles } from 'lucide-react'
+import Link from 'next/link'
+
+export default function SurveyDetailPage() {
+  const { user } = useAuth()
+  const params = useParams()
+  const searchParams = useSearchParams()
+  const [survey, setSurvey] = useState<any>(null)
+  const [responseCount, setResponseCount] = useState(0)
+  const [loading, setLoading] = useState(true)
+
+  const updated = searchParams.get('updated') === 'true'
+
+  useEffect(() => {
+    fetchSurvey()
+  }, [params.id])
+
+  const fetchSurvey = async () => {
+    // 1. Fetch Survey Data
+    const { data: sData, error: sErr } = await supabase
+      .from('surveys')
+      .select('*')
+      .eq('id', params.id)
+      .single()
+
+    if (sErr || !sData) {
+      setLoading(false)
+      return
+    }
+
+    setSurvey(sData)
+
+    // 2. Fetch precisely ONLY the count
+    const { count } = await supabase
+      .from('responses')
+      .select('*', { count: 'exact', head: true })
+      .eq('survey_id', params.id)
+
+    setResponseCount(count || 0)
+    setLoading(false)
+  }
+
+  const toggleStatus = async () => {
+    const { error } = await supabase
+      .from('surveys')
+      .update({ is_active: !survey.is_active })
+      .eq('id', survey.id)
+      
+    if (!error) {
+      setSurvey({ ...survey, is_active: !survey.is_active })
+    }
+  }
+
+  const downloadQR = () => {
+    const canvas = document.getElementById('survey-qr') as HTMLCanvasElement
+    if (!canvas) return
+    const pngUrl = canvas.toDataURL('image/png').replace('image/png', 'image/octet-stream')
+    const downloadLink = document.createElement('a')
+    downloadLink.href = pngUrl
+    downloadLink.download = `survey-${survey.id}.png`
+    document.body.appendChild(downloadLink)
+    downloadLink.click()
+    document.body.removeChild(downloadLink)
+  }
+
+  const copyLink = () => {
+    const url = `${typeof window !== 'undefined' ? window.location.origin : ''}/survey/${survey.id}${user?.id ? `?admin_id=${user.id}` : ''}`
+    navigator.clipboard.writeText(url)
+    alert('담당자 정보가 포함된 링크가 복사되었습니다!')
+  }
+
+  if (loading) return <AdminGuard requireSuperAdmin={true}><div className="p-12 text-center text-primary-500 animate-pulse font-medium">설문지 세부 정보를 불러오는 중입니다...</div></AdminGuard>
+  if (!survey) return <AdminGuard requireSuperAdmin={true}><div className="p-12 text-center text-red-500">해당 설문을 찾을 수 없습니다.</div></AdminGuard>
+
+  const publicUrl = `${typeof window !== 'undefined' ? window.location.origin : ''}/survey/${survey.id}${user?.id ? `?admin_id=${user.id}` : ''}`
+
+  return (
+    <AdminGuard requireSuperAdmin={true}>
+      <main className="min-h-screen w-full bg-[#7A5B44] font-sans">
+        <div className="max-w-3xl mx-auto p-4 lg:p-10 pb-20">
+        <div className="flex items-center gap-4 mb-4">
+          <Link href="/admin/main" className="text-brand-text/70 hover:text-brand-text font-medium flex items-center gap-2 transition-colors -ml-2 p-2 rounded-lg hover:bg-transparent border border-transparent hover:border-beige-200">
+            <ArrowLeft className="w-5 h-5"/> 마스터 대시보드
+          </Link>
+          <h1 className="text-3xl font-light text-brand-text ml-2 border-l-2 border-primary-200 pl-4">설문 관리 상세</h1>
+        </div>
+
+        {updated && (
+          <div className="bg-green-50 text-green-700 p-4 rounded-xl mb-6 shadow-sm border border-green-200 animate-in fade-in slide-in-from-top-4">
+            설문 수정이 성공적으로 저장되었습니다!
+          </div>
+        )}
+
+        <div className="max-w-lg mx-auto bg-transparent rounded-3xl p-8 md:p-12 border border-beige-200 shadow-sm flex flex-col items-center text-center mt-12">
+          <h2 className="text-2xl font-medium text-brand-text mb-6">{survey.title}</h2>
+          
+          <div className="bg-transparent/5 p-8 rounded-full border border-primary-100 shadow-inner mb-6 animate-in zoom-in duration-500">
+            <LinkIcon className="w-12 h-12 text-brand-text" />
+          </div>
+
+          <div className="flex flex-col gap-3 w-full">
+            <a 
+              href={publicUrl} 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="w-full flex items-center justify-center gap-2 py-4 bg-black/20 text-white rounded-2xl hover:bg-black transition font-bold shadow-lg hover:scale-[1.01]"
+            >
+              <Sparkles className="w-5 h-5 text-primary-300" /> 설문 페이지 바로가기 (새 탭)
+            </a>
+            <button 
+              onClick={copyLink}
+              className="w-full flex items-center justify-center gap-2 py-3.5 bg-transparent border border-white/10 text-brand-text/90 rounded-2xl hover:bg-transparent/5 transition font-medium shadow-sm"
+            >
+              <LinkIcon className="w-5 h-5 text-brand-text/50" /> 링크 주소 복사하기
+            </button>
+            
+          </div>
+
+          <div className="w-full mt-8 pt-6 border-t border-white/5 flex items-center justify-between px-2">
+            <span className="text-sm font-medium text-brand-text/80 flex flex-col items-start leading-snug">
+              현재 운영 상태
+              <span className="text-xs text-brand-text/50 font-normal">고객의 접근 가능 여부를 제어합니다.</span>
+            </span>
+            <button 
+              onClick={toggleStatus}
+              className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors ${survey.is_active ? 'bg-green-500' : 'bg-gray-300 shadow-inner'}`}
+            >
+              <span className={`inline-block h-5 w-5 transform rounded-full bg-transparent shadow-sm transition-transform ${survey.is_active ? 'translate-x-[22px]' : 'translate-x-1'}`} />
+            </button>
+          </div>
+          
+          <div className="w-full mt-4 pt-4 border-t border-white/5 flex items-center justify-between px-2 text-sm text-brand-text/80">
+            <span>총 누적 응답 수</span>
+            <span className="font-bold text-brand-text bg-transparent/5 px-2 py-0.5 rounded-lg border border-primary-100">{responseCount}</span>
+          </div>
+        </div>
+
+        </div>
+      </main>
+    </AdminGuard>
+  )
+}
