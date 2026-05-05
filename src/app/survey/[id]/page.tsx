@@ -22,6 +22,18 @@ type Slide =
   | { type: 'step4' }
   | { type: 'step5-first-session' }
 
+interface SurveyAnswers {
+  zone: string[];
+  conditions: string[];
+  coreConditions: string[];
+  primaryCause: string;
+  riskGrade: string;
+  skinThickness: string;
+  tissueType: string;
+  pigmentHigh: boolean;
+  historyOfEasyMarking: boolean;
+}
+
 const RISK_DETAILS: Record<string, { label: string; desc: string; color: string; bg: string; text: string }> = {
   'R1': { label: 'R1 STABLE', desc: '자유로운 관리 접근 가능 (STABLE)', color: 'border-green-200/20', bg: 'bg-green-500/10', text: 'text-green-200' },
   'R2': { label: 'R2 CAUTION', desc: '강도 하향 및 보수적 접근 (CAUTION)', color: 'border-yellow-200/20', bg: 'bg-yellow-500/10', text: 'text-yellow-200' },
@@ -48,7 +60,7 @@ function SurveyContent() {
 
   const [survey, setSurvey] = useState<any>(null)
   const [patientInfo, setPatientInfo] = useState({ name: '', phone: '', birthDate: '', gender: '' })
-  const [answers, setAnswers] = useState<Record<string, any>>({
+  const [answers, setAnswers] = useState<SurveyAnswers>({
     zone: [],
     conditions: [],
     coreConditions: [],
@@ -711,14 +723,14 @@ function SurveyContent() {
                     <div className="flex justify-between items-end">
                       <label className="text-[10px] font-black text-brand-text/20 uppercase tracking-[0.4em]">Skin Thickness</label>
                       <span className="text-brand-dark font-black bg-brand-text px-6 py-2 rounded-full text-[12px] uppercase shadow-lg tracking-widest">
-                        {{
+                        {({
                           '극도로 얇음': 'EXTREMELY THIN',
                           '매우 얇음': 'VERY THIN',
                           '얇은 편': 'THIN',
                           '보통': 'NORMAL',
                           '두꺼운 편': 'THICK',
                           '매우 두꺼움': 'VERY THICK'
-                        }[answers.skinThickness] || answers.skinThickness}
+                        } as Record<string, string>)[answers.skinThickness] || answers.skinThickness}
                       </span>
                     </div>
                     <div className="relative h-16 flex items-center">
