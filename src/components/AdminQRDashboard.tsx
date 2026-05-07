@@ -5,8 +5,9 @@ import { supabase } from '@/lib/supabase'
 import { QRCodeSVG } from 'qrcode.react'
 import { User } from '@supabase/supabase-js'
 import { formatPhoneNumber } from '@/lib/format'
-import { Search, ArrowLeft, ClipboardList, Sparkles, BarChart3 } from 'lucide-react'
+import { Search, ArrowLeft, ClipboardList, Sparkles, BarChart3, Lock, Key, X, CheckCircle2, AlertTriangle } from 'lucide-react'
 import Link from 'next/link'
+import { motion, AnimatePresence } from 'framer-motion'
 
 export default function AdminQRDashboard({ user }: { user: User }) {
   const [activeSurvey, setActiveSurvey] = useState<any>(null)
@@ -28,6 +29,13 @@ export default function AdminQRDashboard({ user }: { user: User }) {
   const [sortBy, setSortBy] = useState('latest')
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 10
+
+  // Password Change State
+  const [showPassModal, setShowPassModal] = useState(false)
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [passLoading, setPassLoading] = useState(false)
+  const [passStatus, setPassStatus] = useState<{ type: 'success' | 'error', message: string } | null>(null)
 
   useEffect(() => {
     setCurrentPage(1)
@@ -70,6 +78,38 @@ export default function AdminQRDashboard({ user }: { user: User }) {
     setLoading(false)
   }
 
+  const handlePasswordUpdate = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (newPassword !== confirmPassword) {
+      setPassStatus({ type: 'error', message: 'PASSWORDS DO NOT MATCH.' })
+      return
+    }
+    if (newPassword.length < 4) {
+      setPassStatus({ type: 'error', message: 'PASSWORD MUST BE AT LEAST 4 CHARACTERS.' })
+      return
+    }
+
+    setPassLoading(true)
+    setPassStatus(null)
+
+    const { error } = await supabase.auth.updateUser({
+      password: newPassword
+    })
+
+    if (error) {
+      setPassStatus({ type: 'error', message: error.message.toUpperCase() })
+    } else {
+      setPassStatus({ type: 'success', message: 'PASSWORD UPDATED SUCCESSFULLY.' })
+      setNewPassword('')
+      setConfirmPassword('')
+      setTimeout(() => {
+        setShowPassModal(false)
+        setPassStatus(null)
+      }, 2000)
+    }
+    setPassLoading(false)
+  }
+
   useEffect(() => {
     fetchData()
   }, [user.id, searchName, startDate, endDate, sortBy])
@@ -84,7 +124,20 @@ export default function AdminQRDashboard({ user }: { user: User }) {
     <div className="max-w-6xl mx-auto p-6 lg:p-10 space-y-8">
       <div className="flex justify-between items-center glass-card p-5 rounded-2xl border border-white/10 shadow-sm">
         <h1 className="text-2xl font-medium text-brand-text tracking-tight"><span className="font-bold">SomeGood</span> CRM</h1>
-        <button onClick={() => supabase.auth.signOut()} className="text-sm text-brand-text/70 hover:text-brand-text border border-white/10 px-4 py-2 rounded-lg transition-all uppercase font-bold tracking-wider">Logout</button>
+        <div className="flex items-center gap-3">
+          <button 
+            onClick={() => setShowPassModal(true)} 
+            className="flex items-center gap-2 text-[10px] text-brand-text/50 hover:text-brand-text border border-white/5 hover:border-white/20 bg-white/5 px-4 py-2 rounded-lg transition-all uppercase font-black tracking-widest"
+          >
+            <Lock className="w-3 h-3" /> Change Password
+          </button>
+          <button 
+            onClick={() => supabase.auth.signOut()} 
+            className="text-[10px] text-brand-text/70 hover:text-brand-text border border-white/10 px-4 py-2 rounded-lg transition-all uppercase font-black tracking-widest"
+          >
+            Logout
+          </button>
+        </div>
       </div>
 
       {viewMode === 'QR_ONLY' ? (
@@ -272,6 +325,88 @@ export default function AdminQRDashboard({ user }: { user: User }) {
           )}
         </div>
       )}
+
+      {/* Password Change Modal */}
+      <AnimatePresence>
+        {showPassModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => !passLoading && setShowPassModal(false)}
+              className="absolute inset-0 bg-black/60 backdrop-blur-md"
+            />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="relative w-full max-w-md glass-card rounded-[2.5rem] p-10 border-white/10 shadow-2xl overflow-hidden"
+            >
+              <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-brand-text/20 via-brand-text to-brand-text/20"></div>
+              
+              <button 
+                onClick={() => setShowPassModal(false)}
+                className="absolute top-6 right-6 text-brand-text/30 hover:text-brand-text transition-colors"
+              >
+                <X className="w-6 h-6" />
+              </button>
+
+              <div className="text-center mb-10">
+                <div className="w-16 h-16 bg-white/5 rounded-2xl flex items-center justify-center mx-auto mb-6 border border-white/10">
+                  <Key className="w-8 h-8 text-brand-text" />
+                </div>
+                <h2 className="text-2xl font-black text-brand-text tracking-tight uppercase">Security Update</h2>
+                <p className="text-[10px] font-black text-brand-text/30 uppercase tracking-[0.3em] mt-2">Update your access credentials</p>
+              </div>
+
+              <form onSubmit={handlePasswordUpdate} className="space-y-6">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-brand-text/40 uppercase tracking-widest ml-1">New Password</label>
+                  <input 
+                    type="password" 
+                    required
+                    placeholder="••••••••"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 outline-none focus:border-brand-text transition-all font-bold tracking-widest"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-brand-text/40 uppercase tracking-widest ml-1">Confirm Password</label>
+                  <input 
+                    type="password" 
+                    required
+                    placeholder="••••••••"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 outline-none focus:border-brand-text transition-all font-bold tracking-widest"
+                  />
+                </div>
+
+                {passStatus && (
+                  <motion.div 
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    className={`p-4 rounded-xl flex items-center gap-3 text-[10px] font-black uppercase tracking-wider ${passStatus.type === 'success' ? 'bg-green-500/10 text-green-400 border border-green-500/20' : 'bg-red-500/10 text-red-400 border border-red-500/20'}`}
+                  >
+                    {passStatus.type === 'success' ? <CheckCircle2 className="w-4 h-4" /> : <AlertTriangle className="w-4 h-4" />}
+                    {passStatus.message}
+                  </motion.div>
+                )}
+
+                <button 
+                  type="submit"
+                  disabled={passLoading}
+                  className="w-full py-5 bg-brand-text text-brand-dark rounded-2xl font-black text-[11px] tracking-[0.3em] uppercase hover:scale-[1.02] active:scale-[0.98] transition-all shadow-xl disabled:opacity-50"
+                >
+                  {passLoading ? 'Updating...' : 'Update Password'}
+                </button>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }

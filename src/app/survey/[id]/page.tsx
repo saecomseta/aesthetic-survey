@@ -85,9 +85,8 @@ function SurveyContent() {
     { type: 'info' },
     { type: 'step1' },
     { type: 'step2' },
-    { type: 'step2-conclusion' },
-    { type: 'step3' },
     { type: 'step4-background' },
+    { type: 'step3' },
     { type: 'stop' },
     { type: 'step4' },
     { type: 'step5-first-session' }
@@ -157,12 +156,8 @@ function SurveyContent() {
         setError('PLEASE SELECT AT LEAST ONE CONDITION.')
         return
       }
-    } else if (currentSlide.type === 'step2-conclusion') {
-      if (answers.coreConditions.length === 0) {
-        setError('PLEASE SELECT AT LEAST ONE CORE FOCUS.')
-        return
-      }
-      const result = calculateStandardResult(answers.zone, answers.conditions, answers.coreConditions)
+      // Calculate result immediately after conditions are selected
+      const result = calculateStandardResult(answers.zone, answers.conditions, [])
       setStandardResult(result)
       if (!answers.primaryCause && result.causes.length > 0) {
         setAnswers(prev => ({ ...prev, primaryCause: result.causes[0].label }))
@@ -262,9 +257,9 @@ function SurveyContent() {
           <div className="inline-flex items-center gap-2 bg-white/10 px-6 py-2 rounded-full border border-white/10 text-brand-text text-[10px] font-black uppercase tracking-[0.3em] shadow-sm mb-4">
             <Sparkles className="w-4 h-4 text-brand-text/50" /> SOMEGOOD STANDARD
           </div>
-          <h1 className="text-4xl md:text-6xl font-black text-brand-text tracking-tighter uppercase leading-[0.9]">
+          <h1 className="text-3xl md:text-5xl font-black text-brand-text tracking-tighter uppercase leading-[0.9]">
             {patientInfo.name}&apos;S<br />
-            <span className="text-3xl md:text-5xl tracking-tight opacity-90">SKIN ANALYSIS DOSSIER</span>
+            <span className="text-2xl md:text-4xl tracking-tight opacity-90">SKIN ANALYSIS DOSSIER</span>
           </h1>
           <p className="text-brand-text/40 tracking-[0.4em] uppercase text-[10px]">Professional Aesthetic Diagnostic Report</p>
         </div>
@@ -279,7 +274,7 @@ function SurveyContent() {
             <div className="space-y-10">
               <div className="bg-white/5 rounded-[2rem] p-10 md:p-14 border border-white/10 backdrop-blur-xl text-center">
                 <div className="space-y-6">
-                  <p className="text-2xl md:text-4xl font-black text-brand-light leading-tight uppercase tracking-tight">
+                  <p className="text-xl md:text-3xl font-black text-brand-light leading-tight uppercase tracking-tight">
                     {standardResult.diagnosticSummaryEn}
                   </p>
                   <div className="w-12 h-[1px] bg-white/10 mx-auto"></div>
@@ -533,8 +528,8 @@ function SurveyContent() {
             {currentSlide.type === 'info' && (
               <div className="glass-card rounded-[3rem] p-10 md:p-16 space-y-12 border-white/10">
                 <div className="text-center">
-                  <h2 className="text-4xl font-black text-brand-text mb-4 uppercase tracking-tight">CUSTOMER INFORMATION</h2>
-                  <p className="text-brand-text/40 text-[10px] font-black uppercase tracking-[0.3em]">Patient Identification & Verification</p>
+                  <h2 className="text-2xl md:text-4xl font-black text-brand-text mb-4 uppercase tracking-tight">CUSTOMER INFORMATION</h2>
+                  <p className="text-brand-text/40 text-[10px] font-bold tracking-[0.2em]">Patient Identification & Verification</p>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
@@ -586,8 +581,8 @@ function SurveyContent() {
             {currentSlide.type === 'step1' && (
               <div className="glass-card rounded-[3rem] p-10 md:p-16 border-white/10">
                 <div className="text-center mb-16">
-                  <h2 className="text-4xl font-black text-brand-text mb-4 uppercase tracking-tight">TARGET ZONE</h2>
-                  <p className="text-brand-text/40 text-[10px] font-black uppercase tracking-[0.3em]">Define the anatomical target area</p>
+                  <h2 className="text-2xl md:text-4xl font-black text-brand-text mb-4 uppercase tracking-tight">TARGET ZONE</h2>
+                  <p className="text-brand-text/40 text-[10px] font-bold tracking-[0.2em]">Define the anatomical target area</p>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                   {ZONES.map(z => (
@@ -607,8 +602,8 @@ function SurveyContent() {
             {currentSlide.type === 'step2' && (
               <div className="glass-card rounded-[3rem] p-10 md:p-16 border-white/10">
                 <div className="text-center mb-16">
-                  <h2 className="text-4xl font-black text-brand-text mb-4 uppercase tracking-tight">DIAGNOSIS</h2>
-                  <p className="text-brand-text/40 text-[10px] font-black uppercase tracking-[0.3em]">Map all observable clinical conditions</p>
+                  <h2 className="text-2xl md:text-4xl font-black text-brand-text mb-4 uppercase tracking-tight">DIAGNOSIS</h2>
+                  <p className="text-brand-text/40 text-[10px] font-bold tracking-[0.2em]">Map all observable clinical conditions</p>
                 </div>
 
                 <div className="space-y-16">
@@ -645,41 +640,7 @@ function SurveyContent() {
               </div>
             )}
 
-            {/* 4. Step 2-Conclusion: Core Reaction */}
-            {currentSlide.type === 'step2-conclusion' && (
-              <div className="glass-card rounded-[3rem] p-10 md:p-16 border-white/10">
-                <div className="text-center mb-16">
-                  <h2 className="text-4xl font-black text-brand-text mb-4 uppercase tracking-tight">CORE PRIORITY</h2>
-                  <p className="text-brand-text/40 text-[10px] font-black uppercase tracking-[0.3em]">Identify the primary intervention target</p>
-                </div>
 
-                <div className="grid grid-cols-1 gap-5">
-                  {answers.conditions.map((item: string, i: number) => {
-                    const isSelected = answers.coreConditions.includes(item);
-                    return (
-                      <button
-                        key={i}
-                        onClick={() => {
-                          setAnswers(prev => {
-                            const current = prev.coreConditions as string[];
-                            if (current.includes(item)) {
-                              return { ...prev, coreConditions: current.filter(c => c !== item) };
-                            }
-                            return { ...prev, coreConditions: [...current, item] };
-                          });
-                        }}
-                        className={`text-left p-8 rounded-[2rem] border transition-all duration-700 ${isSelected ? 'bg-brand-text text-brand-dark border-brand-text shadow-2xl scale-[1.02]' : 'bg-white/5 border-white/10 text-brand-text/30 hover:border-white/30'}`}
-                      >
-                        <div className="flex items-center justify-between">
-                          {renderMixedLabel(CONDITION_DISPLAY_MAP[item] || item, "text-xl font-black", "text-[12px]")}
-                          {isSelected && <CheckCircle2 className="w-8 h-8 text-brand-dark" />}
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
 
             {/* 5. Step 3: Why (Cause Reveal) */}
             {currentSlide.type === 'step3' && standardResult && (
@@ -689,7 +650,7 @@ function SurveyContent() {
                 </div>
                 <div className="relative z-10">
                   <div className="inline-block bg-white/10 text-brand-text px-6 py-2 rounded-full text-[10px] font-black mb-10 tracking-[0.4em] uppercase border border-white/10">ALGORITHM INSIGHT. 01</div>
-                  <h2 className="text-5xl font-black text-brand-text mb-16 uppercase tracking-tight leading-none">CAUSAL<br />ANALYSIS</h2>
+                  <h2 className="text-3xl md:text-5xl font-black text-brand-text mb-10 md:mb-16 uppercase tracking-tight leading-none">CAUSAL<br />ANALYSIS</h2>
 
                   <div className="space-y-8">
                     {standardResult.causes.map((cause, i) => (
@@ -713,8 +674,8 @@ function SurveyContent() {
             {currentSlide.type === 'step4-background' && (
               <div className="glass-card rounded-[3rem] p-10 md:p-16 space-y-16 border-white/10">
                 <div className="text-center">
-                  <h2 className="text-4xl font-black text-brand-text mb-4 uppercase tracking-tight">BIO-PARAMETERS</h2>
-                  <p className="text-brand-text/40 text-[10px] font-black uppercase tracking-[0.3em]">Determining skin physical characteristics</p>
+                  <h2 className="text-2xl md:text-4xl font-black text-brand-text mb-4 uppercase tracking-tight">BIO-PARAMETERS</h2>
+                  <p className="text-brand-text/40 text-[10px] font-bold tracking-[0.2em]">Determining skin physical characteristics</p>
                 </div>
 
                 <div className="space-y-16">

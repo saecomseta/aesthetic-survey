@@ -33,8 +33,9 @@ export default function Home() {
   return (
     <main className="min-h-screen flex items-center justify-center p-6 bg-[#7A5B44] relative overflow-hidden font-sans">
       <div className="z-10 w-full max-w-sm flex flex-col items-center justify-center text-center animate-in fade-in slide-in-from-bottom-8 duration-1000">
-        <h1 className="text-4xl font-black text-brand-text mb-16 tracking-[0.2em] uppercase">
-          SomeGood
+        <h1 className="text-4xl font-black text-brand-text mb-16 tracking-[0.2em] uppercase flex flex-col items-center leading-none">
+          <span>SomeGood</span>
+          <span className="text-xl mt-4 opacity-70 tracking-[0.5em] font-light">Standard</span>
         </h1>
         
         {error && (

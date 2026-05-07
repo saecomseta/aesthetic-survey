@@ -61,6 +61,13 @@ export default function SuperAdminDashboard() {
             <BarChart3 className="w-4 h-4" />
             INTEGRATED DATA
           </Link>
+          <Link
+            href="/admin/managers"
+            className="flex items-center gap-2 px-5 py-2.5 bg-brand-text text-brand-dark rounded-lg hover:scale-105 transition-all shadow-lg font-black text-[10px] uppercase tracking-widest"
+          >
+            <Plus className="w-4 h-4" />
+            MANAGER LIST
+          </Link>
         </div>
       </div>
 
