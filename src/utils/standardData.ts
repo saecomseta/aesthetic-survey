@@ -24,6 +24,7 @@ export const PRIORITY_MAP: Record<string, number> = {
 };
 
 export const CONDITION_MAP: Record<string, ConditionMapping> = {
+  '면포성 여드름': { category: '모공/피지', reactionType: '피지/정체', cause: '피지 정체 구조', conclusions: [7] },
   '모공성 각화증': { category: '모공/피지', reactionType: '각질', cause: '각질 이상 구조', conclusions: [5] },
   '가성속모증': { category: '모공/피지', reactionType: '각질', cause: '각질 이상 구조', conclusions: [5] },
   '인그로운 헤어': { category: '모공/피지', reactionType: '각질', cause: '각질 이상 구조', conclusions: [5] },
@@ -233,6 +234,7 @@ export const ZONE_DISPLAY_MAP: Record<string, string> = {
 };
 
 export const CONDITION_DISPLAY_MAP: Record<string, string> = {
+  '면포성 여드름': 'Comedonal Acne (면포성 여드름 - 화이트헤드/블랙헤드)',
   '모공성 각화증': 'Keratosis Pilaris (모공성 각화증)',
   '가성속모증': 'Pseudofolliculitis (가성속모증)',
   '인그로운 헤어': 'Ingrown Hair (인그로운 헤어)',

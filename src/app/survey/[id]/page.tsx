@@ -18,6 +18,7 @@ type Slide =
   | { type: 'step2-conclusion' }
   | { type: 'step3' }
   | { type: 'step4-background' }
+  | { type: 'step-hormone' }
   | { type: 'stop' }
   | { type: 'step4' }
   | { type: 'step5-first-session' }
@@ -32,6 +33,7 @@ interface SurveyAnswers {
   tissueType: string;
   pigmentHigh: boolean;
   historyOfEasyMarking: boolean;
+  hormonalIssues: string[];
 }
 
 const RISK_DETAILS: Record<string, { label: string; desc: string; color: string; bg: string; text: string }> = {
@@ -69,7 +71,8 @@ function SurveyContent() {
     skinThickness: '보통',
     tissueType: '보통',
     pigmentHigh: false,
-    historyOfEasyMarking: false
+    historyOfEasyMarking: false,
+    hormonalIssues: []
   })
   const [standardResult, setStandardResult] = useState<StandardResult | null>(null)
   const [firstSessionDecision, setFirstSessionDecision] = useState<any>(null)
@@ -86,6 +89,7 @@ function SurveyContent() {
     { type: 'step1' },
     { type: 'step2' },
     { type: 'step4-background' },
+    { type: 'step-hormone' },
     { type: 'step3' },
     { type: 'stop' },
     { type: 'step4' },
@@ -182,6 +186,11 @@ function SurveyContent() {
         historyOfEasyMarking: answers.historyOfEasyMarking || false
       })
       setFirstSessionDecision(decision)
+    } else if (currentSlide.type === 'step-hormone') {
+      if (answers.hormonalIssues.length === 0) {
+        setError('PLEASE SELECT AT LEAST ONE OPTION (OR SELECT "해당 없음").')
+        return
+      }
     }
 
     if (step < slides.length - 1) {
@@ -201,7 +210,16 @@ function SurveyContent() {
     setSubmitting(true)
     // Always recalculate to ensure latest translation logic applies to old records
     const result = calculateStandardResult(answers.zone || [], answers.conditions || [], answers.coreConditions || [])
-    setStandardResult(result)
+    
+    // Enrich result with needsMedicalParallelCare flag based on hormonalIssues selection
+    const hasHormonalIssue = answers.hormonalIssues && answers.hormonalIssues.length > 0 && !answers.hormonalIssues.includes('해당 없음');
+    const enrichedResult = {
+      ...result,
+      flags: {
+        needsMedicalParallelCare: hasHormonalIssue
+      }
+    };
+    setStandardResult(enrichedResult)
 
     const birthDateObj = new Date(patientInfo.birthDate)
     const today = new Date()
@@ -218,10 +236,10 @@ function SurveyContent() {
         patient_gender: patientInfo.gender,
         patient_age_group: storedAgeStr,
         answers: { patientInfo, answers },
-        sector_results: { standardResult: result, firstSessionDecision },
+        sector_results: { standardResult: enrichedResult, firstSessionDecision },
         space_results: [{
           title: 'SOMEGOOD STANDARD 리포트',
-          result,
+          result: enrichedResult,
           firstSessionDecision
         }]
       })
@@ -349,6 +367,47 @@ function SurveyContent() {
               </div>
             </div>
           </div>
+
+          {/* Medical Parallel Care Notice */}
+          {standardResult.flags?.needsMedicalParallelCare && (
+            <div className="p-10 md:p-16 bg-purple-500/10 border-t border-white/5">
+              <div className="flex flex-col md:flex-row items-center md:items-start gap-10">
+                <div className="flex flex-col items-center gap-4 flex-shrink-0">
+                  <div className="w-20 h-20 rounded-[2rem] flex items-center justify-center border-2 bg-purple-500/20 border-purple-500/30 text-purple-300">
+                    <AlertTriangle className="w-10 h-10" />
+                  </div>
+                  <div className="px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-[0.3em] bg-purple-500 text-white">
+                    ADVISORY
+                  </div>
+                </div>
+
+                <div className="flex-1 text-center md:text-left">
+                  <div className="flex flex-col md:flex-row md:items-center gap-x-4 mb-4">
+                    <h3 className="text-2xl font-black text-purple-200 uppercase tracking-tight">
+                      MEDICAL PARALLEL CARE RECOMMENDED
+                    </h3>
+                    <div className="inline-block px-4 py-1.5 rounded-xl text-[11px] font-black mt-4 md:mt-0 uppercase tracking-widest bg-purple-500/20 text-purple-200 border border-purple-200/20">
+                      병원 관리 병행 권장
+                    </div>
+                  </div>
+                  <p className="text-xs font-black text-brand-text/30 mb-4 uppercase tracking-[0.2em]">
+                    호르몬 및 내분비 요인 식별 안내
+                  </p>
+                  <div className="text-brand-text/70 leading-relaxed max-w-xl font-medium space-y-4 text-sm md:text-base">
+                    <p>
+                      선택하신 항목을 기준으로 볼 때, 현재 피부 상태에는 호르몬 또는 내분비 관련 요인이 함께 작용하고 있을 가능성이 있습니다.
+                    </p>
+                    <p>
+                      이러한 경우 피부 표면 관리만으로는 변화 속도나 유지력에 한계가 있을 수 있으므로, 썸굿의 전문 관리와 함께 산부인과, 내분비내과, 피부과 등 병원 진료 또는 기존 치료 관리를 병행하시는 것을 권장드립니다.
+                    </p>
+                    <p className="text-xs text-brand-text/40 italic">
+                      * 썸굿은 피부 외부 환경을 안정적으로 관리하고 회복 흐름을 돕는 방향으로 접근하며, 내부 요인이 의심되는 경우에는 병원 관리와의 병행을 통해 보다 안전하고 현실적인 개선 방향을 제안드립니다.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </section>
 
         {/* PAGE 2: Strategy */}
@@ -765,6 +824,62 @@ function SurveyContent() {
                       </div>
                     </button>
                   </div>
+                </div>
+              </div>
+            )}
+
+            {/* 6.5. Health & Hormonal Issues */}
+            {currentSlide.type === 'step-hormone' && (
+              <div className="glass-card rounded-[3rem] p-10 md:p-16 space-y-16 border-white/10">
+                <div className="text-center">
+                  <h2 className="text-2xl md:text-4xl font-black text-brand-text mb-4 uppercase tracking-tight">HEALTH FACTORS</h2>
+                  <p className="text-brand-text/40 text-[10px] font-bold tracking-[0.2em] uppercase">피부 변화와 함께 참고해야 할 건강 관련 이슈가 있으신가요?</p>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {[
+                    "자궁 관련 이슈",
+                    "갑상선 관련 이슈",
+                    "호르몬 관련 이슈",
+                    "생리 주기 불규칙",
+                    "임신 / 출산 / 수유 이후 변화",
+                    "현재 병원 치료 또는 약 복용 중",
+                    "기타",
+                    "해당 없음"
+                  ].map((option, i) => {
+                    const isSelected = answers.hormonalIssues.includes(option);
+                    return (
+                      <button
+                        key={i}
+                        onClick={() => {
+                          setAnswers(prev => {
+                            const current = prev.hormonalIssues || [];
+                            if (option === "해당 없음") {
+                              if (isSelected) {
+                                return { ...prev, hormonalIssues: [] };
+                              } else {
+                                return { ...prev, hormonalIssues: ["해당 없음"] };
+                              }
+                            } else {
+                              const filtered = current.filter(x => x !== "해당 없음");
+                              if (isSelected) {
+                                return { ...prev, hormonalIssues: filtered.filter(x => x !== option) };
+                              } else {
+                                return { ...prev, hormonalIssues: [...filtered, option] };
+                              }
+                            }
+                          });
+                          setError('');
+                        }}
+                        className={`flex items-center gap-5 p-6 rounded-[1.5rem] border transition-all duration-500 text-left ${isSelected ? 'bg-brand-text text-brand-dark border-brand-text shadow-xl scale-[1.02]' : 'bg-white/5 border-white/10 text-brand-text/30 hover:border-white/20'}`}
+                      >
+                        <div className={`w-6 h-6 rounded-lg flex items-center justify-center border transition-all ${isSelected ? 'border-brand-dark bg-brand-dark' : 'border-white/10'}`}>
+                          {isSelected && <CheckCircle2 className="w-4 h-4 text-brand-text" />}
+                        </div>
+                        <span className="text-sm font-bold">{option}</span>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             )}

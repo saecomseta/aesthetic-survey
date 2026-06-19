@@ -11,6 +11,9 @@ export interface StandardResult {
   conclusions: string[];
   isHighRisk: boolean;
   brandMessage: string;
+  flags?: {
+    needsMedicalParallelCare?: boolean;
+  };
 }
 
 export function calculateStandardResult(zones: string[], conditions: string[], coreConditions: string[] = []): StandardResult {
