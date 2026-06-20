@@ -134,7 +134,14 @@ function ResponseDetailContent() {
   }
   
   // Always recalculate to ensure latest translation logic applies to old records
-  const standardResult = calculateStandardResult(rawAnswers.zone || [], rawAnswers.conditions || [], rawAnswers.coreConditions || [])
+  const standardResultRaw = calculateStandardResult(rawAnswers.zone || [], rawAnswers.conditions || [], rawAnswers.coreConditions || [])
+  const hasHormonalIssue = rawAnswers.hormonalIssues && rawAnswers.hormonalIssues.length > 0 && !rawAnswers.hormonalIssues.includes('해당 없음')
+  const standardResult = {
+    ...standardResultRaw,
+    flags: {
+      needsMedicalParallelCare: hasHormonalIssue
+    }
+  }
   const firstSessionDecision = response.sector_results?.firstSessionDecision || calculateFirstSessionDecision({
     symptoms: rawAnswers.conditions || [],
     primaryCause: standardResult?.mainReaction || '일반 관리',
@@ -231,6 +238,21 @@ function ResponseDetailContent() {
                   </div>
                 </div>
               </div>
+
+              {/* Show health factors card if they exist */}
+              {rawAnswers.hormonalIssues && rawAnswers.hormonalIssues.length > 0 && !rawAnswers.hormonalIssues.includes('해당 없음') && (
+                <div className="bg-white/5 rounded-[2rem] p-8 border border-white/5">
+                  <h4 className="text-brand-text/30 text-[10px] font-black mb-6 uppercase tracking-[0.3em]">HEALTH & HORMONAL FACTORS</h4>
+                  <ul className="space-y-4">
+                    {rawAnswers.hormonalIssues.map((item: string, i: number) => (
+                      <li key={i} className="flex items-center gap-3 text-purple-200 font-medium text-sm">
+                        <div className="w-1.5 h-1.5 rounded-full bg-purple-400"></div>
+                        {item}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </div>
           </div>
 
@@ -265,6 +287,47 @@ function ResponseDetailContent() {
               </div>
             </div>
           </div>
+
+          {/* Medical Parallel Care Notice */}
+          {standardResult.flags?.needsMedicalParallelCare && (
+            <div className="p-10 md:p-16 bg-purple-500/10 border-t border-white/5">
+              <div className="flex flex-col md:flex-row items-center md:items-start gap-10">
+                <div className="flex flex-col items-center gap-4 flex-shrink-0">
+                  <div className="w-20 h-20 rounded-[2rem] flex items-center justify-center border-2 bg-purple-500/20 border-purple-500/30 text-purple-300">
+                    <AlertTriangle className="w-10 h-10" />
+                  </div>
+                  <div className="px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-[0.3em] bg-purple-500 text-white">
+                    ADVISORY
+                  </div>
+                </div>
+
+                <div className="flex-1 text-center md:text-left">
+                  <div className="flex flex-col md:flex-row md:items-center gap-x-4 mb-4">
+                    <h3 className="text-2xl font-black text-purple-200 uppercase tracking-tight">
+                      MEDICAL PARALLEL CARE RECOMMENDED
+                    </h3>
+                    <div className="inline-block px-4 py-1.5 rounded-xl text-[11px] font-black mt-4 md:mt-0 uppercase tracking-widest bg-purple-500/20 text-purple-200 border border-purple-200/20">
+                      병원 관리 병행 권장
+                    </div>
+                  </div>
+                  <p className="text-xs font-black text-brand-text/30 mb-4 uppercase tracking-[0.2em]">
+                    호르몬 및 내분비 요인 식별 안내
+                  </p>
+                  <div className="text-brand-text/70 leading-relaxed max-w-xl font-medium space-y-4 text-sm md:text-base">
+                    <p>
+                      선택하신 항목을 기준으로 볼 때, 현재 피부 상태에는 호르몬 또는 내분비 관련 요인이 함께 작용하고 있을 가능성이 있습니다.
+                    </p>
+                    <p>
+                      이러한 경우 피부 표면 관리만으로는 변화 속도나 유지력에 한계가 있을 수 있으므로, 썸굿의 전문 관리와 함께 산부인과, 내분비내과, 피부과 등 병원 진료 또는 기존 치료 관리를 병행하시는 것을 권장드립니다.
+                    </p>
+                    <p className="text-xs text-brand-text/40 italic">
+                      * 썸굿은 피부 외부 환경을 안정적으로 관리하고 회복 흐름을 돕는 방향으로 접근하며, 내부 요인이 의심되는 경우에는 병원 관리와의 병행을 통해 보다 안전하고 현실적인 개선 방향을 제안드립니다.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </section>
 
         {/* 02. MANAGEMENT STRATEGY (SAME AS PUBLIC) */}

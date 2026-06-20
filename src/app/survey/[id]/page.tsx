@@ -333,6 +333,21 @@ function SurveyContent() {
                   </div>
                 </div>
               </div>
+
+              {/* Show health factors card if they exist */}
+              {answers.hormonalIssues && answers.hormonalIssues.length > 0 && !answers.hormonalIssues.includes('해당 없음') && (
+                <div className="bg-white/5 rounded-[2rem] p-8 border border-white/5">
+                  <h4 className="text-brand-text/30 text-[10px] font-black mb-6 uppercase tracking-[0.3em]">HEALTH & HORMONAL FACTORS</h4>
+                  <ul className="space-y-4">
+                    {answers.hormonalIssues.map((item, i) => (
+                      <li key={i} className="flex items-center gap-3 text-purple-200 font-medium text-sm">
+                        <div className="w-1.5 h-1.5 rounded-full bg-purple-400"></div>
+                        {item}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </div>
           </div>
 
