@@ -863,9 +863,12 @@ function SurveyContent() {
                     "해당 없음"
                   ].map((option, i) => {
                     const isSelected = answers.hormonalIssues.includes(option);
+                    const isNoneSelected = answers.hormonalIssues.includes("해당 없음");
+                    const isDisabled = isNoneSelected && option !== "해당 없음";
                     return (
                       <button
                         key={i}
+                        disabled={isDisabled}
                         onClick={() => {
                           setAnswers(prev => {
                             const current = prev.hormonalIssues || [];
@@ -886,7 +889,7 @@ function SurveyContent() {
                           });
                           setError('');
                         }}
-                        className={`flex items-center gap-5 p-6 rounded-[1.5rem] border transition-all duration-500 text-left ${isSelected ? 'bg-brand-text text-brand-dark border-brand-text shadow-xl scale-[1.02]' : 'bg-white/5 border-white/10 text-brand-text/30 hover:border-white/20'}`}
+                        className={`flex items-center gap-5 p-6 rounded-[1.5rem] border transition-all duration-500 text-left ${isSelected ? 'bg-brand-text text-brand-dark border-brand-text shadow-xl scale-[1.02]' : isDisabled ? 'bg-white/5 border-white/5 text-brand-text/10 opacity-30 cursor-not-allowed' : 'bg-white/5 border-white/10 text-brand-text/30 hover:border-white/20'}`}
                       >
                         <div className={`w-6 h-6 rounded-lg flex items-center justify-center border transition-all ${isSelected ? 'border-brand-dark bg-brand-dark' : 'border-white/10'}`}>
                           {isSelected && <CheckCircle2 className="w-4 h-4 text-brand-text" />}
